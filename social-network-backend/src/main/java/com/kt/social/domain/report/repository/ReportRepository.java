@@ -1,4 +1,4 @@
 package com.kt.social.domain.report.repository;
 
-public class ReportRepository {
+public interface ReportRepository {
 }
