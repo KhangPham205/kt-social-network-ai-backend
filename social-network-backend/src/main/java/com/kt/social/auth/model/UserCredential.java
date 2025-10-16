@@ -1,7 +1,11 @@
 package com.kt.social.auth.model;
 
+import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "user_credential")
@@ -21,8 +25,28 @@ public class UserCredential {
     @Column(nullable = false)
     private String password;
 
+    @Column(unique = true)
+    private String email;
+
+//    @Column(unique = true)
+//    private String phone;
+
     @Column(nullable = false)
     private String role = "USER";
 
-    private boolean enabled = true;
+    private boolean enabled = false;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    private Set<Role> roles = new HashSet<>();
+
+    // Quan hệ 1-1 với bảng User (thông tin cá nhân)
+    @OneToOne
+    @JoinColumn(name = "user_id", referencedColumnName = "id")
+    private User user;
+
 }
