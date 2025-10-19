@@ -9,6 +9,7 @@ import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.enums.AccountStatus;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +24,12 @@ public class DataInitializer {
     private final PermissionRepository permissionRepository;
     private final UserCredentialRepository userCredentialRepository;
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${admin.username}")
+    private String adminUsername;
+
+    @Value("${admin.password}")
+    private String adminPassword;
 
     @PostConstruct
     public void init() {
@@ -42,16 +49,16 @@ public class DataInitializer {
 
         if (!userCredentialRepository.existsByUsername("admin")) {
             UserCredential admin = UserCredential.builder()
-                    .username("admin")
+                    .username(adminUsername)
                     .email("admin@social.local")
-                    .password(passwordEncoder.encode("admin@123"))
+                    .password(passwordEncoder.encode(adminPassword))
                     .role(adminRole)
                     .roles(Set.of(adminRole))
                     .status(AccountStatus.ACTIVE)
                     .build();
 
             userCredentialRepository.save(admin);
-            System.out.println("✅ Default admin account created: username=admin, password=Admin@123");
+            System.out.println("✅ Default admin account created: " + adminUsername + " " + adminPassword);
         } else {
             System.out.println("ℹ️ Admin account already exists, skipping creation.");
         }
