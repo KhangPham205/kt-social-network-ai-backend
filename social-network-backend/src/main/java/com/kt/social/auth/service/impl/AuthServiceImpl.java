@@ -49,6 +49,7 @@ public class AuthServiceImpl implements AuthService {
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .email(registerRequest.getEmail())
                 .role(userRole)
+                .status(AccountStatus.PENDING)
                 .build();
 
         userCredentialRepository.save(userCredential);
