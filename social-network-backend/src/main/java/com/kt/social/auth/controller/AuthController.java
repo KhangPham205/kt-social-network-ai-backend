@@ -1,12 +1,9 @@
 package com.kt.social.auth.controller;
 
-import com.kt.social.auth.dto.LoginRequest;
-import com.kt.social.auth.dto.RegisterRequest;
-import com.kt.social.auth.dto.TokenResponse;
-import com.kt.social.auth.model.RefreshToken;
+import com.kt.social.auth.dto.*;
 import com.kt.social.auth.service.AuthService;
+import com.kt.social.auth.service.PasswordResetService;
 import com.kt.social.auth.service.RefreshTokenService;
-import com.kt.social.auth.security.JwtProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,10 +17,10 @@ public class AuthController {
 
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
-    private final JwtProvider jwtProvider;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/register")
-    public ResponseEntity<TokenResponse> register(@RequestBody RegisterRequest request) {
+    public ResponseEntity<String> register(@RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authService.register(request));
     }
 
@@ -33,22 +30,38 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<TokenResponse> refresh(@RequestBody Map<String, String> body) {
-        String refreshToken = body.get("refreshToken");
+    public ResponseEntity<TokenResponse> refresh(@RequestBody RefreshTokenRequest request) {
+        return ResponseEntity.ok(refreshTokenService.refresh(request));
+    }
 
-        RefreshToken token = refreshTokenService.findByToken(refreshToken)
-                .map(refreshTokenService::verifyExpiration)
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token. Please log in again."));
+    @PostMapping("/sendVerifyEmail")
+    public ResponseEntity<?> sendVerifyEmail(@RequestParam String email) {
+        String code = authService.sendVerificationCode(email);
+        return ResponseEntity.ok(Map.of("message", "Verification code generated successfully", "code", code));
+    }
 
-        var user = token.getUser();
-        var userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(user.getUsername())
-                .password(user.getPassword())
-                .roles(user.getRole())
-                .build();
+    @PostMapping("/verifyEmail")
+    public ResponseEntity<?> verifyEmail(@RequestParam String email, @RequestParam String code) {
+        boolean success = authService.verifyEmail(email, code);
+        if (success) {
+            return ResponseEntity.ok(Map.of("message", "Email verified successfully"));
+        } else {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid verification code"));
+        }
+    }
 
-        String newAccessToken = jwtProvider.generateToken(userDetails);
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody PasswordResetRequest request) {
+        String code = passwordResetService.sendResetCode(request);
+        return ResponseEntity.ok(Map.of(
+                "message", "Verification code sent to email (simulated)",
+                "code", code
+        ));
+    }
 
-        return ResponseEntity.ok(new TokenResponse(newAccessToken, token.getToken()));
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, String>> verifyResetCode(@RequestBody VerifyResetCodeRequest request) {
+        passwordResetService.verifyCodeAndResetPassword(request);
+        return ResponseEntity.ok(Map.of("message", "Password has been successfully reset"));
     }
 }

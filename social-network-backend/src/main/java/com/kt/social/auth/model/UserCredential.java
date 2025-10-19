@@ -1,5 +1,6 @@
 package com.kt.social.auth.model;
 
+import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -31,10 +32,15 @@ public class UserCredential {
 //    @Column(unique = true)
 //    private String phone;
 
-    @Column(nullable = false)
-    private String role = "USER";
+    @ManyToOne
+    @JoinColumn(name = "role_id", nullable = false)
+    private Role role;
 
-    private boolean enabled = false;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AccountStatus status = AccountStatus.PENDING;
+
+    private String verificationCode; // mã xác thực email
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
