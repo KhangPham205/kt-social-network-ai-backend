@@ -13,6 +13,8 @@ public class OtpVerificationRequest {
     @NotBlank
     @Email
     private String email;
+
+    @NotBlank
     private String code;
 
     @NotBlank
