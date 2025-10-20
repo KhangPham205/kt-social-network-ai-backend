@@ -6,5 +6,5 @@ public interface AuthService {
     RegisterResponse register(RegisterRequest request);
     TokenResponse login(LoginRequest request);
     SendVerifyEmailResponse sendVerificationCode(String email);
-    boolean verifyEmail(VerifyEmailRequest request);
+    boolean verifyOtp(OtpVerificationRequest request);
 }
