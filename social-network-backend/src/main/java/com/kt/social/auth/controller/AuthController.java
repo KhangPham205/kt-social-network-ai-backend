@@ -39,18 +39,8 @@ public class AuthController {
         return ResponseEntity.ok(authService.sendVerificationCode(request.getEmail()));
     }
 
-    @PostMapping("/verifyEmail")
-    public ResponseEntity<?> verifyEmail(@RequestBody VerifyEmailRequest request) {
-        boolean success = authService.verifyEmail(request);
-        if (success) {
-            return ResponseEntity.ok(Map.of("message", "Email verified successfully"));
-        } else {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid verification code"));
-        }
-    }
-
-    @PostMapping("/forgot-password")
-    public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody PasswordResetRequest request) {
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(@RequestBody PasswordResetRequest request) {
         String code = passwordResetService.sendResetCode(request);
         return ResponseEntity.ok(Map.of(
                 "message", "Verification code sent to email (simulated)",
@@ -58,9 +48,13 @@ public class AuthController {
         ));
     }
 
-    @PostMapping("/change-password")
-    public ResponseEntity<Map<String, String>> verifyResetCode(@RequestBody VerifyResetCodeRequest request) {
-        passwordResetService.verifyCodeAndResetPassword(request);
-        return ResponseEntity.ok(Map.of("message", "Password has been successfully reset"));
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@RequestBody OtpVerificationRequest request) {
+        boolean success = authService.verifyOtp(request);
+        if (success) {
+            return ResponseEntity.ok(Map.of("message", "OTP verified successfully"));
+        } else {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP"));
+        }
     }
 }
