@@ -35,14 +35,13 @@ public class AuthController {
     }
 
     @PostMapping("/sendVerifyEmail")
-    public ResponseEntity<?> sendVerifyEmail(@RequestParam String email) {
-        String code = authService.sendVerificationCode(email);
-        return ResponseEntity.ok(Map.of("message", "Verification code generated successfully", "code", code));
+    public ResponseEntity<?> sendVerifyEmail(@RequestBody SendVerifyEmailRequest request) {
+        return ResponseEntity.ok(authService.sendVerificationCode(request.getEmail()));
     }
 
     @PostMapping("/verifyEmail")
-    public ResponseEntity<?> verifyEmail(@RequestParam String email, @RequestParam String code) {
-        boolean success = authService.verifyEmail(email, code);
+    public ResponseEntity<?> verifyEmail(@RequestBody VerifyEmailRequest request) {
+        boolean success = authService.verifyEmail(request);
         if (success) {
             return ResponseEntity.ok(Map.of("message", "Email verified successfully"));
         } else {

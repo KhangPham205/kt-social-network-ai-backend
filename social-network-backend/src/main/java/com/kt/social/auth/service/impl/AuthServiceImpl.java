@@ -1,8 +1,6 @@
 package com.kt.social.auth.service.impl;
 
-import com.kt.social.auth.dto.LoginRequest;
-import com.kt.social.auth.dto.RegisterRequest;
-import com.kt.social.auth.dto.TokenResponse;
+import com.kt.social.auth.dto.*;
 import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.auth.model.RefreshToken;
 import com.kt.social.auth.model.Role;
@@ -93,7 +91,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public String sendVerificationCode(String email) {
+    public SendVerifyEmailResponse sendVerificationCode(String email) {
         Optional<UserCredential> optionalUser = userCredentialRepository.findByEmail(email);
         if (optionalUser.isEmpty()) {
             throw new RuntimeException("Email not found");
@@ -106,16 +104,16 @@ public class AuthServiceImpl implements AuthService {
         userCredentialRepository.save(user);
 
         // Tạm thời chỉ log ra hoặc trả về
-        System.out.println("Verification code for " + email + ": " + code);
-        return code;
+        // System.out.println("Verification code for " + email + ": " + code);
+        return new SendVerifyEmailResponse("Verification code generated successfully", code);
     }
 
     @Override
-    public boolean verifyEmail(String email, String code) {
-        UserCredential user = userCredentialRepository.findByEmail(email)
+    public boolean verifyEmail(VerifyEmailRequest request) {
+        UserCredential user = userCredentialRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("Email not found"));
 
-        if (user.getVerificationCode() != null && user.getVerificationCode().equals(code)) {
+        if (user.getVerificationCode() != null && user.getVerificationCode().equals(request.getCode())) {
             user.setStatus(AccountStatus.ACTIVE);
             user.setVerificationCode(null);
             userCredentialRepository.save(user);
