@@ -9,6 +9,6 @@ import java.util.Optional;
 
 public interface RefreshTokenService {
     Optional<RefreshToken> findByToken(String token);
-    TokenResponse refresh(RefreshTokenRequest request);
+    TokenResponse  refresh(RefreshTokenRequest request);
     RefreshToken createRefreshToken(UserCredential user);
 }

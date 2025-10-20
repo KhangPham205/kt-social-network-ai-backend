@@ -1,6 +1,7 @@
 package com.kt.social.auth.service.impl;
 
 import com.kt.social.auth.dto.RefreshTokenRequest;
+import com.kt.social.auth.dto.LoginResponse;
 import com.kt.social.auth.dto.TokenResponse;
 import com.kt.social.auth.model.RefreshToken;
 import com.kt.social.auth.model.UserCredential;
@@ -55,7 +56,10 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .build();
 
         String newAccessToken = jwtProvider.generateToken(userDetails);
-        return new TokenResponse(newAccessToken, refreshToken);
+        return TokenResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(refreshToken)
+                .build();
     }
 
     @Override

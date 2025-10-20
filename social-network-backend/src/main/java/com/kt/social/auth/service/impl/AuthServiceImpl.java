@@ -66,23 +66,33 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public TokenResponse login(LoginRequest loginRequest) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword())
-        );
-
+    public LoginResponse login(LoginRequest loginRequest) {
         UserCredential userCredential = userCredentialRepository.findByUsername(loginRequest.getUsername())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + loginRequest.getUsername()));
 
+        if (!passwordEncoder.matches(loginRequest.getPassword(), userCredential.getPassword())) {
+            throw new IllegalArgumentException("Wrong password");
+        }
+
         if (userCredential.getStatus() != AccountStatus.ACTIVE) {
-            throw new IllegalStateException("User is disabled");
+            return LoginResponse.builder()
+                    .email(userCredential.getEmail())
+                    .status(userCredential.getStatus())
+                    .build();
         }
 
         UserDetails userDetails = buildUserDetails(userCredential);
         String accessToken = jwtProvider.generateToken(userDetails);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
 
-        return new TokenResponse(accessToken, refreshToken.getToken());
+        return LoginResponse.builder()
+                .email(userCredential.getEmail())
+                .status(userCredential.getStatus())
+                .token(TokenResponse.builder()
+                        .accessToken(accessToken)
+                        .refreshToken(refreshToken.getToken())
+                        .build())
+                .build();
     }
 
     @Override

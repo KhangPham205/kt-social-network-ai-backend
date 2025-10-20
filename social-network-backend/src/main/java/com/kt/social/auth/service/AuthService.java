@@ -4,7 +4,7 @@ import com.kt.social.auth.dto.*;
 
 public interface AuthService {
     RegisterResponse register(RegisterRequest request);
-    TokenResponse login(LoginRequest request);
+    LoginResponse login(LoginRequest request);
     SendVerifyEmailResponse sendVerificationCode(String email);
     boolean verifyOtp(OtpVerificationRequest request);
 }
