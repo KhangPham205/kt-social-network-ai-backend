@@ -34,7 +34,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenService refreshTokenService;
 
     @Override
-    public String register(RegisterRequest registerRequest) {
+    public RegisterResponse register(RegisterRequest registerRequest) {
         if (userCredentialRepository.existsByUsername(registerRequest.getUsername())) {
             throw new RuntimeException("Username is already in use");
         }
@@ -62,7 +62,7 @@ public class AuthServiceImpl implements AuthService {
 
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
 
-        return "Registered Successfully";
+        return new RegisterResponse("Registered Successfully");
     }
 
     @Override
