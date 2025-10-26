@@ -51,8 +51,6 @@ public class UserCredential {
     private Set<Role> roles = new HashSet<>();
 
     // Quan hệ 1-1 với bảng User (thông tin cá nhân)
-    @OneToOne
-    @JoinColumn(name = "user_id", referencedColumnName = "id")
+    @OneToOne(mappedBy = "credential")
     private User user;
-
 }

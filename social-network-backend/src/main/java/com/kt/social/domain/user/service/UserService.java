@@ -10,6 +10,9 @@ public interface UserService {
     UserProfileDto updateProfile(Long userId, UpdateUserProfileRequest request);
     FollowResponse followUser(Long followerId, Long followingId);
     FollowResponse unfollowUser(Long followerId, Long followingId);
+    FollowResponse followUserByUsername(String username, Long targetId);
     List<UserProfileDto> getFollowers(Long userId);
     List<UserProfileDto> getFollowing(Long userId);
+
+    UserProfileDto getProfileByUsername(String username);
 }

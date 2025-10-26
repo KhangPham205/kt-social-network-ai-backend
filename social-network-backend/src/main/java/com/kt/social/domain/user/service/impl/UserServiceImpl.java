@@ -1,5 +1,7 @@
 package com.kt.social.domain.user.service.impl;
 
+import com.kt.social.auth.model.UserCredential;
+import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.*;
@@ -11,12 +13,14 @@ import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
+    private final UserCredentialRepository userCredentialRepository;
     private final UserRepository userRepository;
     private final UserRelaRepository userRelaRepository;
     private final UserMapper userMapper;
@@ -122,6 +126,18 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public FollowResponse followUserByUsername(String username, Long targetId) {
+        UserCredential cred = userCredentialRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Long userId = Optional.ofNullable(cred.getUser())
+                .orElseThrow(() -> new RuntimeException("Profile not created"))
+                .getId();
+
+        return followUser(userId, targetId); // tái sử dụng logic hiện có
+    }
+
+    @Override
     public List<UserProfileDto> getFollowers(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -141,5 +157,13 @@ public class UserServiceImpl implements UserService {
                 .map(UserRela::getFollowing)
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public UserProfileDto getProfileByUsername(String username) {
+        UserCredential cred = userCredentialRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Credential not found"));
+        User user = userRepository.findByCredential(cred);
+        return userMapper.toDto(user);
     }
 }
