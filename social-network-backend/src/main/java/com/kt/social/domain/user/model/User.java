@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import com.kt.social.common.entity.BaseEntity;
 
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "users")
 @Data
@@ -13,27 +14,19 @@ import com.kt.social.common.entity.BaseEntity;
 @Builder
 public class User extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, unique = true)
-    private String username;
-
     @Column(nullable = false)
-    private String password;
-
-    private String email;
+    private String displayName;
 
     private String avatarUrl;
 
-    private String status;
+    private String interestedUser;
 
     private Boolean isActive = true;
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private UserInfo userInfo;
 
     @OneToOne(mappedBy = "user")
+    @JoinColumn(name = "credential_id", referencedColumnName = "id")
     private UserCredential credential;
 }

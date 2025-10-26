@@ -12,9 +12,13 @@ import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.security.JwtProvider;
 import com.kt.social.auth.service.AuthService;
 import com.kt.social.auth.service.RefreshTokenService;
+import com.kt.social.domain.user.model.UserInfo;
+import com.kt.social.domain.user.repository.UserInfoRepository;
+import com.kt.social.domain.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.User;
@@ -38,6 +42,8 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RefreshTokenService refreshTokenService;
+    private final UserRepository userRepository;
+    private final UserInfoRepository userInfoRepository;
 
     @Override
     public RegisterResponse register(RegisterRequest registerRequest) {
@@ -57,6 +63,23 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         userCredentialRepository.save(userCredential);
+
+        com.kt.social.domain.user.model.User user = com.kt.social.domain.user.model.User .builder()
+                .displayName(registerRequest.getFullname())
+                .isActive(true)
+                .credential(userCredential)
+                .build();
+
+        userRepository.save(user);
+
+        UserInfo userInfo = UserInfo.builder()
+                .bio("")
+                .favorites("")
+                .dateOfBirth(registerRequest.getDateOfBirth())
+                .user(user)
+                .build();
+
+        userInfoRepository.save(userInfo);
 
         UserDetails userDetails = buildUserDetails(userCredential);
         String accessToken = jwtProvider.generateToken(userDetails);

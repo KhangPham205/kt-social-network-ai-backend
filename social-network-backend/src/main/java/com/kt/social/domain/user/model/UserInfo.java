@@ -1,7 +1,10 @@
 package com.kt.social.domain.user.model;
 
+import com.kt.social.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
@@ -10,17 +13,15 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UserInfo {
+public class UserInfo extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String bio;
 
-    private String fullName;
     private String favorites;
-    private LocalDate dateOfBirth;
+
+    private Instant dateOfBirth;
 
     @OneToOne
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", referencedColumnName = "id")
     private User user;
 }
