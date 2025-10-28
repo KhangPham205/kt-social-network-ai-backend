@@ -4,6 +4,7 @@ import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.domain.user.dto.*;
+import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,6 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
-    private final UserCredentialRepository credentialRepository;
 
     @GetMapping("/{id}")
     public ResponseEntity<UserProfileDto> getUserProfile(@PathVariable Long id) {
@@ -33,23 +33,19 @@ public class UserController {
 
     @PutMapping("/me")
     public ResponseEntity<UserProfileDto> updateProfile(@RequestBody UpdateUserProfileRequest request) {
-        return ResponseEntity.ok(userService.updateProfile(null, request));
+        return ResponseEntity.ok(userService.updateProfile(request));
     }
 
     @PostMapping("/follow")
     public ResponseEntity<FollowResponse> follow(@RequestParam Long targetId) {
-        Long currentUserId = SecurityUtils.getCurrentUserCredential(credentialRepository)
-                .map(UserCredential::getId)
-                .orElseThrow(() -> new RuntimeException("User not authenticated"));
-        return ResponseEntity.ok(userService.followUser(currentUserId, targetId));
+        User currentUser = userService.getCurrentUser();
+        return ResponseEntity.ok(userService.followUser(currentUser.getId(), targetId));
     }
 
     @DeleteMapping("/unfollow")
     public ResponseEntity<FollowResponse> unfollow(@RequestParam Long targetId) {
-        Long currentUserId = SecurityUtils.getCurrentUserCredential(credentialRepository)
-                .map(UserCredential::getId)
-                .orElseThrow(() -> new RuntimeException("User not authenticated"));
-        return ResponseEntity.ok(userService.unfollowUser(currentUserId, targetId));
+        User currentUser = userService.getCurrentUser();
+        return ResponseEntity.ok(userService.unfollowUser(currentUser.getId(), targetId));
     }
 
     @GetMapping("/{id}/followers")

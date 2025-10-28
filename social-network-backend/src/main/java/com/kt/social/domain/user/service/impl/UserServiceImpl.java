@@ -2,6 +2,7 @@ package com.kt.social.domain.user.service.impl;
 
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
+import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.*;
@@ -26,58 +27,32 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
 
     @Override
-    public UserProfileDto getProfile(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        UserProfileDto dto = userMapper.toDto(user);
-        System.out.println("➡️ Mapped dto: " + dto);
-        return dto;
+    public User getCurrentUser() {
+        String username = SecurityUtils.getCurrentUsername()
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
+
+        return userRepository.findByCredentialUsername(username);
     }
 
     @Override
-    public UserProfileDto updateProfile(Long id, UpdateUserProfileRequest request) {
+    public UserProfileDto getProfile(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        return userMapper.toDto(user);
+    }
 
-        // Chỉ cập nhật nếu displayName không null hoặc không rỗng
-        if (request.getDisplayName() != null && !request.getDisplayName().isBlank()) {
-            user.setDisplayName(request.getDisplayName());
-        }
+    @Override
+    public UserProfileDto updateProfile(UpdateUserProfileRequest request) {
+        var credential = SecurityUtils.getCurrentUserCredential(userCredentialRepository)
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
 
-        // Chỉ cập nhật nếu avatarUrl không null hoặc không rỗng
-        if (request.getAvatarUrl() != null && !request.getAvatarUrl().isBlank()) {
-            user.setAvatarUrl(request.getAvatarUrl());
-        }
+        User user = userRepository.findById(credential.getUser().getId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        UserInfo info = user.getUserInfo();
-        if (info == null) {
-            info = new UserInfo();
-            info.setUser(user);
-            user.setUserInfo(info);
-        }
-
-        // Chỉ cập nhật nếu bio không null hoặc không rỗng
-        if (request.getBio() != null && !request.getBio().isBlank()) {
-            info.setBio(request.getBio());
-        }
-
-        // Chỉ cập nhật nếu favorites không null hoặc không rỗng
-        if (request.getFavorites() != null && !request.getFavorites().isBlank()) {
-            info.setFavorites(request.getFavorites());
-        }
-
-        // Chỉ cập nhật nếu dateOfBirth không null
-        if (request.getDateOfBirth() != null) {
-            info.setDateOfBirth(request.getDateOfBirth()
-                    .atZone(ZoneId.systemDefault())
-                    .toInstant());
-        }
-
+        updateUserFields(user, request);
         userRepository.save(user);
 
-        UserProfileDto dto = userMapper.toDto(user);
-        System.out.println("➡️ Mapped dto: " + dto);
-        return dto;
+        return userMapper.toDto(user);
     }
 
     @Override
@@ -126,18 +101,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public FollowResponse followUserByUsername(String username, Long targetId) {
-        UserCredential cred = userCredentialRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        Long userId = Optional.ofNullable(cred.getUser())
-                .orElseThrow(() -> new RuntimeException("Profile not created"))
-                .getId();
-
-        return followUser(userId, targetId); // tái sử dụng logic hiện có
-    }
-
-    @Override
     public List<UserProfileDto> getFollowers(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -165,5 +128,28 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new RuntimeException("Credential not found"));
         User user = userRepository.findByCredential(cred);
         return userMapper.toDto(user);
+    }
+
+
+    // ---------------------- Helper Method ---------------------------------
+    private void updateUserFields(User user, UpdateUserProfileRequest request) {
+        if (request.getDisplayName() != null && !request.getDisplayName().isBlank()) {
+            user.setDisplayName(request.getDisplayName());
+        }
+        if (request.getAvatarUrl() != null && !request.getAvatarUrl().isBlank()) {
+            user.setAvatarUrl(request.getAvatarUrl());
+        }
+
+        UserInfo info = user.getUserInfo();
+        if (info == null) {
+            info = new UserInfo();
+            info.setUser(user);
+            user.setUserInfo(info);
+        }
+
+        if (request.getBio() != null && !request.getBio().isBlank()) info.setBio(request.getBio());
+        if (request.getFavorites() != null && !request.getFavorites().isBlank()) info.setFavorites(request.getFavorites());
+        if (request.getDateOfBirth() != null)
+            info.setDateOfBirth(request.getDateOfBirth().atZone(ZoneId.systemDefault()).toInstant());
     }
 }

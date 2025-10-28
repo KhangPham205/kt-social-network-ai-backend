@@ -10,5 +10,12 @@ public interface FriendshipService {
     FriendshipResponse acceptRequest(Long userId, Long requesterId);
     FriendshipResponse rejectRequest(Long userId, Long requesterId);
     FriendshipResponse unfriend(Long userId, Long friendId);
+
+    FriendshipResponse blockUser(Long userId, Long targetId);
+    FriendshipResponse unblockUser(Long userId, Long targetId);
+
+    List<UserProfileDto> getPendingRequests(Long userId);
+    List<UserProfileDto> getBlockedUsers(Long userId);
+
     List<UserProfileDto> getFriends(Long userId);
 }

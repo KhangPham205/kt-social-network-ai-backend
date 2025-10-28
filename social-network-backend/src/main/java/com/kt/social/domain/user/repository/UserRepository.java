@@ -10,4 +10,5 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
     User findByCredential(UserCredential cred);
+    User findByCredentialUsername(String username);
 }
