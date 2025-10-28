@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 
@@ -13,7 +14,7 @@ import java.time.Instant;
 @Builder
 public class UpdateUserProfileRequest {
     private String displayName;
-    private String avatarUrl;
+    private MultipartFile avatarFile;
     private String bio;
     private String favorites;
     private Instant dateOfBirth;

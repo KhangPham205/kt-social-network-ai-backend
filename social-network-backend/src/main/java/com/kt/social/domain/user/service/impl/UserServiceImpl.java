@@ -8,13 +8,13 @@ import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.*;
 import com.kt.social.domain.user.repository.*;
 import com.kt.social.domain.user.service.UserService;
+import com.kt.social.infra.storage.service.StorageService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,6 +25,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserRelaRepository userRelaRepository;
     private final UserMapper userMapper;
+    private final StorageService storageService;
 
     @Override
     public User getCurrentUser() {
@@ -42,6 +43,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public UserProfileDto updateProfile(UpdateUserProfileRequest request) {
         var credential = SecurityUtils.getCurrentUserCredential(userCredentialRepository)
                 .orElseThrow(() -> new RuntimeException("User not authenticated"));
@@ -49,9 +51,28 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(credential.getUser().getId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        updateUserFields(user, request);
-        userRepository.save(user);
+        // cập nhật thông tin text
+        if (request.getDisplayName() != null) user.setDisplayName(request.getDisplayName());
+        if (request.getBio() != null && user.getUserInfo() != null)
+            user.getUserInfo().setBio(request.getBio());
+        if (request.getFavorites() != null && user.getUserInfo() != null)
+            user.getUserInfo().setFavorites(request.getFavorites());
+        if (request.getDateOfBirth() != null && user.getUserInfo() != null)
+            user.getUserInfo().setDateOfBirth(request.getDateOfBirth());
 
+        // nếu có file avatar
+        if (request.getAvatarFile() != null && !request.getAvatarFile().isEmpty()) {
+            String avatarUrl = storageService.saveFile(request.getAvatarFile(), "avatars");
+
+            // xóa avatar cũ nếu có
+            if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+                storageService.deleteFile(user.getAvatarUrl());
+            }
+
+            user.setAvatarUrl(avatarUrl);
+        }
+
+        userRepository.save(user);
         return userMapper.toDto(user);
     }
 
@@ -130,26 +151,25 @@ public class UserServiceImpl implements UserService {
         return userMapper.toDto(user);
     }
 
+    @Transactional
+    @Override
+    public UserProfileDto updateAvatar(MultipartFile avatarFile) {
+        var credential = SecurityUtils.getCurrentUserCredential(userCredentialRepository)
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
 
-    // ---------------------- Helper Method ---------------------------------
-    private void updateUserFields(User user, UpdateUserProfileRequest request) {
-        if (request.getDisplayName() != null && !request.getDisplayName().isBlank()) {
-            user.setDisplayName(request.getDisplayName());
-        }
-        if (request.getAvatarUrl() != null && !request.getAvatarUrl().isBlank()) {
-            user.setAvatarUrl(request.getAvatarUrl());
-        }
+        User user = userRepository.findById(credential.getUser().getId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        UserInfo info = user.getUserInfo();
-        if (info == null) {
-            info = new UserInfo();
-            info.setUser(user);
-            user.setUserInfo(info);
+        // Xóa ảnh cũ (nếu có)
+        if (user.getAvatarUrl() != null) {
+            storageService.deleteFile(user.getAvatarUrl());
         }
 
-        if (request.getBio() != null && !request.getBio().isBlank()) info.setBio(request.getBio());
-        if (request.getFavorites() != null && !request.getFavorites().isBlank()) info.setFavorites(request.getFavorites());
-        if (request.getDateOfBirth() != null)
-            info.setDateOfBirth(request.getDateOfBirth().atZone(ZoneId.systemDefault()).toInstant());
+        // Lưu ảnh mới
+        String avatarUrl = storageService.saveAvatar(avatarFile);
+        user.setAvatarUrl(avatarUrl);
+        userRepository.save(user);
+
+        return userMapper.toDto(user);
     }
 }

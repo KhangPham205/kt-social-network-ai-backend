@@ -2,6 +2,8 @@ package com.kt.social.domain.user.service;
 
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.model.User;
+import jakarta.transaction.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +16,6 @@ public interface UserService {
     FollowResponse unfollowUser(Long followerId, Long followingId);
     List<UserProfileDto> getFollowers(Long userId);
     List<UserProfileDto> getFollowing(Long userId);
-
     UserProfileDto getProfileByUsername(String username);
+    UserProfileDto updateAvatar(MultipartFile avatarFile);
 }

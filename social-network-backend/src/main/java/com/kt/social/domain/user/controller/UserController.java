@@ -7,10 +7,12 @@ import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -31,9 +33,17 @@ public class UserController {
         return ResponseEntity.ok(userService.getProfileByUsername(userDetails.getUsername()));
     }
 
-    @PutMapping("/me")
-    public ResponseEntity<UserProfileDto> updateProfile(@RequestBody UpdateUserProfileRequest request) {
+    @PutMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserProfileDto> updateProfile(@ModelAttribute UpdateUserProfileRequest request) {
         return ResponseEntity.ok(userService.updateProfile(request));
+    }
+
+    @PutMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserProfileDto> uploadAvatar(
+            @RequestParam("file") MultipartFile file
+    ) {
+        UserProfileDto updatedUser = userService.updateAvatar(file);
+        return ResponseEntity.ok(updatedUser);
     }
 
     @PostMapping("/follow")
