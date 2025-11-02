@@ -9,7 +9,12 @@ import org.springframework.stereotype.Component;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * Hỗ trợ tạo và xác thực JWT có chứa userId, username, roles.
+ */
 @Component
 public class JwtProvider {
 
@@ -23,40 +28,60 @@ public class JwtProvider {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
-    public String generateToken(UserDetails userDetails) {
-        var authorities = userDetails.getAuthorities()
+    public String generateToken(UserDetails userDetails, Long userId) {
+        List<String> authorities = userDetails.getAuthorities()
                 .stream().map(GrantedAuthority::getAuthority).toList();
 
         return Jwts.builder()
                 .setSubject(userDetails.getUsername())
-                .claim("roles", authorities)
+                .addClaims(Map.of(
+                        "userId", userId,
+                        "roles", authorities
+                ))
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    public String extractUsername(String token) {
+    public boolean validateToken(String token) {
+        try {
+            Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public Claims getClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
                 .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
+                .getBody();
+    }
+
+    public String extractUsername(String token) {
+        return getClaims(token).getSubject();
+    }
+
+    public Long extractUserId(String token) {
+        Object idObj = getClaims(token).get("userId");
+        if (idObj instanceof Integer) return ((Integer) idObj).longValue();
+        if (idObj instanceof Long) return (Long) idObj;
+        return null;
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
+        String username = extractUsername(token);
         return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 
     private boolean isTokenExpired(String token) {
-        Date expiration = Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .getExpiration();
+        Date expiration = getClaims(token).getExpiration();
         return expiration.before(new Date());
     }
 }

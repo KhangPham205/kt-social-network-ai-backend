@@ -55,7 +55,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .roles(user.getRole().getName())
                 .build();
 
-        String newAccessToken = jwtProvider.generateToken(userDetails);
+        String newAccessToken = jwtProvider.generateToken(userDetails, user.getId());
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(refreshToken)

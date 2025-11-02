@@ -10,6 +10,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.Optional;
 
+/**
+ * Tiện ích lấy user hiện tại (dùng được cả trong REST + Service).
+ */
 public final class SecurityUtils {
 
     private SecurityUtils() {}
@@ -26,13 +29,9 @@ public final class SecurityUtils {
         return getCurrentUsername().flatMap(repo::findByUsername);
     }
 
-    public Long getCurrentUserId(UserCredentialRepository repo) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
-            throw new RuntimeException("User not authenticated");
-        }
-
-        String username = auth.getName();
+    public static Long getCurrentUserId(UserCredentialRepository repo) {
+        String username = getCurrentUsername()
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
         return repo.findByUsername(username)
                 .map(UserCredential::getId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -42,7 +41,8 @@ public final class SecurityUtils {
             UserCredentialRepository credRepo,
             UserRepository userRepo
     ) {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        String username = getCurrentUsername()
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
 
         UserCredential cred = credRepo.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Credential not found"));

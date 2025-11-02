@@ -82,7 +82,7 @@ public class AuthServiceImpl implements AuthService {
         userInfoRepository.save(userInfo);
 
         UserDetails userDetails = buildUserDetails(userCredential);
-        String accessToken = jwtProvider.generateToken(userDetails);
+        String accessToken = jwtProvider.generateToken(userDetails, userCredential.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
 
         return new RegisterResponse("Registered Successfully");
@@ -105,7 +105,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         UserDetails userDetails = buildUserDetails(userCredential);
-        String accessToken = jwtProvider.generateToken(userDetails);
+        String accessToken = jwtProvider.generateToken(userDetails, userCredential.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
 
         return LoginResponse.builder()

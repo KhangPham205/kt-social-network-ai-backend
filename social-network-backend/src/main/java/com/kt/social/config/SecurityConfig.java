@@ -37,7 +37,9 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/api/auth/**",
-                                "/api/v1/auth/**"
+                                "/api/v1/auth/**",
+                                "/ws/**",
+                                "/ws"
                         ).permitAll()
                         // ✅ Mọi request khác yêu cầu xác thực JWT
                         .anyRequest().authenticated()
