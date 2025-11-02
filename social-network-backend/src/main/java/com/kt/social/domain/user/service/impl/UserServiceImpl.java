@@ -3,15 +3,20 @@ package com.kt.social.domain.user.service.impl;
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.vo.PageVO;
+import com.kt.social.domain.friendship.enums.FriendshipStatus;
+import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.*;
 import com.kt.social.domain.user.repository.*;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.service.StorageService;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -25,6 +30,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserRelaRepository userRelaRepository;
     private final UserMapper userMapper;
+    private final FriendshipRepository friendshipRepository;
     private final StorageService storageService;
 
     @Override
@@ -144,6 +150,53 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
+    public PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable) {
+        User viewer = getCurrentUser();
+        User target = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Page<UserRela> followers = userRelaRepository.findByFollowing(target, pageable);
+        List<UserRelationDto> content = followers.stream()
+                .map(UserRela::getFollower)
+                .map(user -> mapToRelationDto(viewer, user))
+                .toList();
+
+        return PageVO.<UserRelationDto>builder()
+                .page(followers.getNumber())
+                .size(followers.getSize())
+                .totalElements(followers.getTotalElements())
+                .totalPages(followers.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    // ========== Following (phân trang + kèm quan hệ) ==========
+    @Override
+    @Transactional
+    public PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable) {
+        User viewer = getCurrentUser();
+        User target = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Page<UserRela> following = userRelaRepository.findByFollower(target, pageable);
+        List<UserRelationDto> content = following.stream()
+                .map(UserRela::getFollowing)
+                .map(user -> mapToRelationDto(viewer, user))
+                .toList();
+
+        return PageVO.<UserRelationDto>builder()
+                .page(following.getNumber())
+                .size(following.getSize())
+                .totalElements(following.getTotalElements())
+                .totalPages(following.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    @Override
     public UserProfileDto getProfileByUsername(String username) {
         UserCredential cred = userCredentialRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Credential not found"));
@@ -171,5 +224,84 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
 
         return userMapper.toDto(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserRelationDto getRelationWithUser(Long targetUserId) {
+        User viewer = getCurrentUser();
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new RuntimeException("Target user not found"));
+
+        boolean isFollowing = userRelaRepository.existsByFollowerAndFollowing(viewer, target);
+        boolean isFollowedBy = userRelaRepository.existsByFollowerAndFollowing(target, viewer);
+
+        boolean isFriend = friendshipRepository.existsByUserAndFriendAndStatus(viewer, target, FriendshipStatus.ACCEPTED)
+                || friendshipRepository.existsByUserAndFriendAndStatus(target, viewer, FriendshipStatus.ACCEPTED);
+
+        return UserRelationDto.builder()
+                .id(target.getId())
+                .displayName(target.getDisplayName())
+                .avatarUrl(target.getAvatarUrl())
+                .isActive(target.getIsActive())
+                .bio(target.getUserInfo() != null ? target.getUserInfo().getBio() : null)
+                .favorites(target.getUserInfo() != null ? target.getUserInfo().getFavorites() : null)
+                .dateOfBirth(target.getUserInfo() != null ? target.getUserInfo().getDateOfBirth() : null)
+                .isFollowing(isFollowing)
+                .isFollowedBy(isFollowedBy)
+                .isFriend(isFriend)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public FriendshipStatusDto getFriendshipStatusWithUser(Long targetUserId) {
+        User viewer = getCurrentUser();
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new RuntimeException("Target user not found"));
+
+        var friendshipOpt = friendshipRepository.findByUserAndFriend(viewer, target)
+                .or(() -> friendshipRepository.findByUserAndFriend(target, viewer));
+
+        if (friendshipOpt.isEmpty()) {
+            return FriendshipStatusDto.builder()
+                    .exists(false)
+                    .status(null)
+                    .build();
+        }
+
+        var friendship = friendshipOpt.get();
+
+        return FriendshipStatusDto.builder()
+                .exists(true)
+                .status(friendship.getStatus())
+                .requesterId(friendship.getUser().getId())
+                .receiverId(friendship.getFriend().getId())
+                .build();
+    }
+
+    // ========== Hàm tiện ích chuyển đổi User → UserRelationDto ==========
+    private UserRelationDto mapToRelationDto(User viewer, User target) {
+        boolean isFollowing = userRelaRepository.existsByFollowerAndFollowing(viewer, target);
+        boolean isFollowedBy = userRelaRepository.existsByFollowerAndFollowing(target, viewer);
+        boolean isFriend =
+                friendshipRepository.existsByUserAndFriendAndStatus(viewer, target, FriendshipStatus.ACCEPTED)
+                        || friendshipRepository.existsByUserAndFriendAndStatus(target, viewer, FriendshipStatus.ACCEPTED);
+
+        // Lấy thông tin user đầy đủ từ mapper
+        UserProfileDto base = userMapper.toDto(target);
+
+        return UserRelationDto.builder()
+                .id(base.getId())
+                .displayName(base.getDisplayName())
+                .avatarUrl(base.getAvatarUrl())
+                .isActive(base.getIsActive())
+                .bio(base.getBio())
+                .favorites(base.getFavorites())
+                .dateOfBirth(base.getDateOfBirth())
+                .isFollowing(isFollowing)
+                .isFollowedBy(isFollowedBy)
+                .isFriend(isFriend)
+                .build();
     }
 }

@@ -17,5 +17,8 @@ public interface FriendshipService {
     List<UserProfileDto> getPendingRequests(Long userId);
     List<UserProfileDto> getBlockedUsers(Long userId);
 
+    FriendshipResponse unsendRequest(Long userId, Long targetId);
+    List<UserProfileDto> getSentRequests(Long userId);
+
     List<UserProfileDto> getFriends(Long userId);
 }

@@ -25,6 +25,13 @@ public class FriendshipController {
         return ResponseEntity.ok(friendshipService.sendRequest(currentUserId, targetId));
     }
 
+    // Hủy yêu cầu lời mời kết bạn
+    @PostMapping("/unsend")
+    public ResponseEntity<FriendshipResponse> unsendRequest(@RequestParam Long targetId) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(friendshipService.unsendRequest(currentUserId, targetId));
+    }
+
     // Chấp nhận lời mời
     @PostMapping("/accept")
     public ResponseEntity<FriendshipResponse> acceptRequest(@RequestParam Long requesterId) {
@@ -58,6 +65,12 @@ public class FriendshipController {
     public ResponseEntity<FriendshipResponse> unblockUser(@RequestParam Long targetId) {
         Long currentUserId = userService.getCurrentUser().getId();
         return ResponseEntity.ok(friendshipService.unblockUser(currentUserId, targetId));
+    }
+
+    @GetMapping("/sent")
+    public ResponseEntity<List<UserProfileDto>> getSentRequests() {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(friendshipService.getSentRequests(currentUserId));
     }
 
     // Lấy danh sách bạn bè của chính mình

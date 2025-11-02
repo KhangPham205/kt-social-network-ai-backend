@@ -8,6 +8,8 @@ import lombok.experimental.Accessors;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.lang.Nullable;
 
+import java.time.Instant;
+
 @Getter
 @Setter
 @EntityListeners(AuditingEntityListener.class)
@@ -20,10 +22,10 @@ public class BaseEntity {
     private Long id;
 
     @Nullable
-    private Long createdAt;
+    private Instant createdAt;
 
     @Nullable
-    private Long updatedAt;
+    private Instant updatedAt;
 
     @Nullable
     private String createdBy;

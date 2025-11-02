@@ -2,6 +2,8 @@ package com.kt.social.domain.user.repository;
 
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.model.UserRela;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,4 +17,6 @@ public interface UserRelaRepository extends JpaRepository<UserRela, Long> {
     Optional<UserRela> findByFollowerAndFollowing(User follower, User following);
     boolean existsByFollowerAndFollowing(User follower, User following);
     void deleteByFollowerAndFollowing(User follower, User following);
+    Page<UserRela> findByFollowing(User following, Pageable pageable);
+    Page<UserRela> findByFollower(User follower, Pageable pageable);
 }

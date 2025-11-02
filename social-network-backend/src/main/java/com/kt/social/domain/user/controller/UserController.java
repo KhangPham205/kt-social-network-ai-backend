@@ -1,20 +1,18 @@
 package com.kt.social.domain.user.controller;
 
-import com.kt.social.auth.model.UserCredential;
-import com.kt.social.auth.repository.UserCredentialRepository;
-import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -39,11 +37,8 @@ public class UserController {
     }
 
     @PutMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<UserProfileDto> uploadAvatar(
-            @RequestParam("file") MultipartFile file
-    ) {
-        UserProfileDto updatedUser = userService.updateAvatar(file);
-        return ResponseEntity.ok(updatedUser);
+    public ResponseEntity<UserProfileDto> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(userService.updateAvatar(file));
     }
 
     @PostMapping("/follow")
@@ -59,12 +54,28 @@ public class UserController {
     }
 
     @GetMapping("/{id}/followers")
-    public ResponseEntity<List<UserProfileDto>> getFollowers(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getFollowers(id));
+    public ResponseEntity<PageVO<UserRelationDto>> getFollowers(
+            @PathVariable Long id,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(userService.getFollowersPaged(id, pageable));
     }
 
     @GetMapping("/{id}/following")
-    public ResponseEntity<List<UserProfileDto>> getFollowing(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getFollowing(id));
+    public ResponseEntity<PageVO<UserRelationDto>> getFollowing(
+            @PathVariable Long id,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(userService.getFollowingPaged(id, pageable));
+    }
+
+    @GetMapping("/{id}/relation")
+    public ResponseEntity<UserRelationDto> getRelationWith(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getRelationWithUser(id));
+    }
+
+    @GetMapping("/{id}/friendship")
+    public ResponseEntity<FriendshipStatusDto> getFriendshipWith(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getFriendshipStatusWithUser(id));
     }
 }

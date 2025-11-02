@@ -9,9 +9,9 @@ import com.kt.social.domain.user.dto.UserProfileDto;
 import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -192,6 +192,52 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .map(Friendship::getFriend)
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public FriendshipResponse unsendRequest(Long userId, Long targetId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        User friend = userRepository.findById(targetId)
+                .orElseThrow(() -> new RuntimeException("Target user not found"));
+
+        // Tìm lời mời giữa 2 người
+        Optional<Friendship> existing = friendshipRepository.findByUserAndFriend(user, friend)
+                .or(() -> friendshipRepository.findByUserAndFriend(friend, user));
+
+        if (existing.isEmpty()) {
+            throw new RuntimeException("No friend request found between users");
+        }
+
+        Friendship friendship = existing.get();
+
+        // Chỉ người gửi mới được hủy lời mời
+        if (!friendship.getUser().getId().equals(userId)) {
+            throw new RuntimeException("You cannot unsend a request you didn’t send");
+        }
+
+        // Chỉ hủy nếu trạng thái là PENDING
+        if (friendship.getStatus() != FriendshipStatus.PENDING) {
+            throw new RuntimeException("Cannot unsend a request that is not pending");
+        }
+
+        friendshipRepository.delete(friendship);
+        return new FriendshipResponse("Friend request unsent", null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserProfileDto> getSentRequests(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<Friendship> sentRequests = friendshipRepository.findByUserAndStatus(user, FriendshipStatus.PENDING);
+
+        return sentRequests.stream()
+                .map(Friendship::getFriend)
+                .map(userMapper::toDto)
+                .toList();
     }
 
     @Override
