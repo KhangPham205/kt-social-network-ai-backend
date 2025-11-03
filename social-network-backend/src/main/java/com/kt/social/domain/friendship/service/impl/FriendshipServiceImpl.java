@@ -52,7 +52,7 @@ public class FriendshipServiceImpl implements FriendshipService {
                     f.setReceiver(friend);
                     f.setStatus(FriendshipStatus.PENDING);
                     friendshipRepository.save(f);
-                    return new FriendshipResponse("Friend request re-sent", FriendshipStatus.PENDING);
+                    return new FriendshipResponse("Friend request re-sent", FriendshipStatus.PENDING, userId, targetId);
                 }
             }
         }
@@ -63,7 +63,7 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .status(FriendshipStatus.PENDING)
                 .build());
 
-        return new FriendshipResponse("Friend request sent", FriendshipStatus.PENDING);
+        return new FriendshipResponse("Friend request sent", FriendshipStatus.PENDING, userId, targetId);
     }
 
     @Override
@@ -78,7 +78,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         f.setStatus(FriendshipStatus.FRIEND);
         friendshipRepository.save(f);
 
-        return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND);
+        return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }
 
     @Override
@@ -90,7 +90,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         friendshipRepository.findBySenderAndReceiver(sender, receiver)
                 .ifPresent(friendshipRepository::delete);
 
-        return new FriendshipResponse("Friend request rejected", FriendshipStatus.REJECTED);
+        return new FriendshipResponse("Friend request rejected", FriendshipStatus.REJECTED, senderId, receiverId);
     }
 
     @Override
@@ -104,7 +104,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         friendshipRepository.findBySenderAndReceiver(friend, user)
                 .ifPresent(friendshipRepository::delete);
 
-        return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED);
+        return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED, userId, friendId);
     }
 
     @Override
@@ -129,7 +129,7 @@ public class FriendshipServiceImpl implements FriendshipService {
             f.setReceiver(target);
             f.setStatus(FriendshipStatus.BLOCKED);
             friendshipRepository.save(f);
-            return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED);
+            return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED, userId, targetId);
         }
 
         // Chưa có, tạo mới
@@ -140,7 +140,7 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .build();
 
         friendshipRepository.save(block);
-        return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED);
+        return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED, userId, targetId);
     }
 
     @Override
@@ -159,7 +159,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         }
 
         friendshipRepository.delete(friendship);
-        return new FriendshipResponse("User unblocked successfully", FriendshipStatus.REJECTED);
+        return new FriendshipResponse("User unblocked successfully", FriendshipStatus.REJECTED, userId, targetId);
     }
 
     @Override
@@ -275,6 +275,6 @@ public class FriendshipServiceImpl implements FriendshipService {
         }
 
         friendshipRepository.delete(friendship);
-        return new FriendshipResponse("Friend request unsent", null);
+        return new FriendshipResponse("Friend request unsent", null, userId, targetId);
     }
 }

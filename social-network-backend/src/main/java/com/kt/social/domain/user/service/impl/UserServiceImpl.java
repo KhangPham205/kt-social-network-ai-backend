@@ -270,6 +270,8 @@ public class UserServiceImpl implements UserService {
                 .or(() -> friendshipRepository.findBySenderAndReceiver(target, viewer))
                 .map(f -> FriendshipResponse.builder()
                         .status(f.getStatus())
+                        .senderId(viewer.getId())
+                        .receiverId(target.getId())
                         .build())
                 .orElse(FriendshipResponse.builder().build()); // Empty response if no friendship exists
 
