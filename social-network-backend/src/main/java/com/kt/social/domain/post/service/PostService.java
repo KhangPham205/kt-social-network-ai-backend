@@ -11,6 +11,7 @@ public interface PostService {
     PageVO<PostResponse> getMyPosts(Pageable pageable);
     PageVO<PostResponse> getUserPosts(Long userId, Pageable pageable);
     PostResponse sharePost(Long originalPostId, String caption);
+    PageVO<PostResponse> getFeed(Pageable pageable, String filter);
 
     @Transactional
     void deletePost(Long postId);

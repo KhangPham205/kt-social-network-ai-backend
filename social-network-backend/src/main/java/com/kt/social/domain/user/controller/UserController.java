@@ -21,6 +21,14 @@ public class UserController {
 
     private final UserService userService;
 
+    @GetMapping("/search")
+    public ResponseEntity<PageVO<UserProfileDto>> searchUsers(
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(userService.searchUsers(filter, pageable));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<UserProfileDto> getUserProfile(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getProfile(id));

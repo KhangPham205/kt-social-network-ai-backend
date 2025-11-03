@@ -2,12 +2,15 @@ package com.kt.social.domain.friendship.controller;
 
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
+import com.kt.social.domain.friendship.model.Friendship;
 import com.kt.social.domain.friendship.service.FriendshipService;
 import com.kt.social.domain.user.dto.UserProfileDto;
 import com.kt.social.domain.user.service.UserService;
+import io.github.perplexhub.rsql.RSQLJPASupport;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.parameters.P;
 import org.springframework.web.bind.annotation.*;
@@ -72,35 +75,51 @@ public class FriendshipController {
     }
 
     @GetMapping("/sent")
-    public ResponseEntity<PageVO<UserProfileDto>> getSentRequests(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PageVO<UserProfileDto>> getSentRequests(
+            @ParameterObject Pageable pageable,
+            @RequestParam(value = "filter", required = false) String filter
+    ){
         Long currentUserId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(friendshipService.getSentRequests(currentUserId, pageable));
+        return ResponseEntity.ok(friendshipService.getSentRequests(currentUserId, filter, pageable));
     }
 
     // Lấy danh sách bạn bè của chính mình
     @GetMapping
-    public ResponseEntity<PageVO<UserProfileDto>> getMyFriends(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PageVO<UserProfileDto>> getMyFriends(
+            @ParameterObject Pageable pageable,
+            @RequestParam(value = "filter", required = false) String filter
+    ) {
         Long currentUserId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(friendshipService.getFriends(currentUserId, pageable));
+        return ResponseEntity.ok(friendshipService.getFriends(currentUserId, filter, pageable));
     }
 
     // Lấy danh sách bạn bè của user khác
     @GetMapping("/{userId}")
-    public ResponseEntity<PageVO<UserProfileDto>> getFriends(@PathVariable Long userId, @ParameterObject Pageable pageable) {
-        return ResponseEntity.ok(friendshipService.getFriends(userId, pageable));
+    public ResponseEntity<PageVO<UserProfileDto>> getFriends(
+            @PathVariable Long userId,
+            @ParameterObject Pageable pageable,
+            @RequestParam(value = "filter", required = false) String filter
+    ){
+        return ResponseEntity.ok(friendshipService.getFriends(userId, filter, pageable));
     }
 
     // Lấy danh sách lời mời kết bạn đang chờ
     @GetMapping("/pending")
-    public ResponseEntity<PageVO<UserProfileDto>> getPendingRequests(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PageVO<UserProfileDto>> getPendingRequests(
+            @ParameterObject Pageable pageable,
+            @RequestParam(value = "filter", required = false) String filter
+    ) {
         Long currentUserId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(friendshipService.getPendingRequests(currentUserId, pageable));
+        return ResponseEntity.ok(friendshipService.getPendingRequests(currentUserId, filter, pageable));
     }
 
     // Lấy danh sách người bị chặn
     @GetMapping("/blocked")
-    public ResponseEntity<PageVO<UserProfileDto>> getBlockedUsers(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PageVO<UserProfileDto>> getBlockedUsers(
+            @ParameterObject Pageable pageable,
+            @RequestParam(value = "filter", required = false) String filter
+    ) {
         Long currentUserId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(friendshipService.getBlockedUsers(currentUserId, pageable));
+        return ResponseEntity.ok(friendshipService.getBlockedUsers(currentUserId, filter, pageable));
     }
 }

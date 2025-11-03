@@ -3,6 +3,7 @@ package com.kt.social.domain.user.service.impl;
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.service.BaseFilterService;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
@@ -15,6 +16,7 @@ import com.kt.social.infra.storage.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,7 +25,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class UserServiceImpl implements UserService {
+public class UserServiceImpl extends BaseFilterService<User, UserProfileDto> implements UserService {
 
     private final UserCredentialRepository userCredentialRepository;
     private final UserRepository userRepository;
@@ -127,53 +129,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional
-    public PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable) {
-        User viewer = getCurrentUser();
-        User target = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        Page<UserRela> followers = userRelaRepository.findByFollowing(target, pageable);
-        List<UserRelationDto> content = followers.stream()
-                .map(UserRela::getFollower)
-                .map(user -> mapToRelationDto(viewer, user))
-                .toList();
-
-        return PageVO.<UserRelationDto>builder()
-                .page(followers.getNumber())
-                .size(followers.getSize())
-                .totalElements(followers.getTotalElements())
-                .totalPages(followers.getTotalPages())
-                .numberOfElements(content.size())
-                .content(content)
-                .build();
-    }
-
-    // ========== Following (phân trang + kèm quan hệ) ==========
-    @Override
-    @Transactional
-    public PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable) {
-        User viewer = getCurrentUser();
-        User target = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        Page<UserRela> following = userRelaRepository.findByFollower(target, pageable);
-        List<UserRelationDto> content = following.stream()
-                .map(UserRela::getFollowing)
-                .map(user -> mapToRelationDto(viewer, user))
-                .toList();
-
-        return PageVO.<UserRelationDto>builder()
-                .page(following.getNumber())
-                .size(following.getSize())
-                .totalElements(following.getTotalElements())
-                .totalPages(following.getTotalPages())
-                .numberOfElements(content.size())
-                .content(content)
-                .build();
-    }
-
-    @Override
     public UserProfileDto getProfileByUsername(String username) {
         UserCredential cred = userCredentialRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Credential not found"));
@@ -212,54 +167,68 @@ public class UserServiceImpl implements UserService {
         return mapToRelationDto(current, target);
     }
 
-//    @Override
-//    @Transactional(readOnly = true)
-//    public FriendshipStatusDto getFriendshipStatusWithUser(Long targetUserId) {
-//        User viewer = getCurrentUser();
-//        User target = userRepository.findById(targetUserId)
-//                .orElseThrow(() -> new RuntimeException("Target user not found"));
-//
-//        var friendshipOpt = friendshipRepository.findByUserAndFriend(viewer, target)
-//                .or(() -> friendshipRepository.findByUserAndFriend(target, viewer));
-//
-//        if (friendshipOpt.isEmpty()) {
-//            return FriendshipStatusDto.builder()
-//                    .exists(false)
-//                    .status(null)
-//                    .build();
-//        }
-//
-//        var friendship = friendshipOpt.get();
-//
-//        return FriendshipStatusDto.builder()
-//                .exists(true)
-//                .status(friendship.getStatus())
-//                .requesterId(friendship.getUser().getId())
-//                .receiverId(friendship.getFriend().getId())
-//                .build();
-//    }
+    // ---------------------- Search + Filter ----------------------
 
-//    @Override
-//    public List<UserProfileDto> getFollowers(Long id) {
-//        User user = userRepository.findById(id)
-//                .orElseThrow(() -> new RuntimeException("User not found"));
-//        return userRelaRepository.findByFollowing(user)
-//                .stream()
-//                .map(UserRela::getFollower)
-//                .map(userMapper::toDto)
-//                .collect(Collectors.toList());
-//    }
-//
-//    @Override
-//    public List<UserProfileDto> getFollowing(Long id) {
-//        User user = userRepository.findById(id)
-//                .orElseThrow(() -> new RuntimeException("User not found"));
-//        return userRelaRepository.findByFollower(user)
-//                .stream()
-//                .map(UserRela::getFollowing)
-//                .map(userMapper::toDto)
-//                .collect(Collectors.toList());
-//    }
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> searchUsers(String filter, Pageable pageable) {
+        // baseSpec: loại bỏ người dùng bị khóa hoặc chính mình
+        var currentUser = getCurrentUser();
+        Specification<User> base = (root, q, cb) -> cb.and(
+                cb.notEqual(root.get("id"), currentUser.getId()),
+                cb.isTrue(root.get("isActive"))
+        );
+
+        return filterEntity(User.class, filter, pageable, userRepository, userMapper::toDto, base);
+    }
+
+    // ---------------------- Follow/Unfollow ----------------------
+
+    @Override
+    @Transactional
+    public PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable) {
+        User viewer = getCurrentUser();
+        User target = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        var followers = userRelaRepository.findByFollowing(target, pageable);
+        var content = followers.getContent().stream()
+                .map(UserRela::getFollower)
+                .map(user -> mapToRelationDto(viewer, user))
+                .toList();
+
+        return PageVO.<UserRelationDto>builder()
+                .page(followers.getNumber())
+                .size(followers.getSize())
+                .totalElements(followers.getTotalElements())
+                .totalPages(followers.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable) {
+        User viewer = getCurrentUser();
+        User target = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        var following = userRelaRepository.findByFollower(target, pageable);
+        var content = following.getContent().stream()
+                .map(UserRela::getFollowing)
+                .map(user -> mapToRelationDto(viewer, user))
+                .toList();
+
+        return PageVO.<UserRelationDto>builder()
+                .page(following.getNumber())
+                .size(following.getSize())
+                .totalElements(following.getTotalElements())
+                .totalPages(following.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
 
     // ========== Hàm tiện ích chuyển đổi User → UserRelationDto ==========
     private UserRelationDto mapToRelationDto(User viewer, User target) {

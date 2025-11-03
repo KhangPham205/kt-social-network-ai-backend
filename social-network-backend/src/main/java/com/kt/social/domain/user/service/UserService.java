@@ -16,12 +16,10 @@ public interface UserService {
     UserProfileDto updateProfile(UpdateUserProfileRequest request);
     FollowResponse followUser(Long followerId, Long followingId);
     FollowResponse unfollowUser(Long followerId, Long followingId);
+    PageVO<UserProfileDto> searchUsers(String filter, Pageable pageable);
     PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable);
     PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable);
     UserProfileDto getProfileByUsername(String username);
     UserProfileDto updateAvatar(MultipartFile avatarFile);
     UserRelationDto getRelationWithUser(Long targetUserId);
-    //List<UserProfileDto> getFollowers(Long userId);
-    //List<UserProfileDto> getFollowing(Long userId);
-    //FriendshipStatusDto getFriendshipStatusWithUser(Long targetUserId);
 }

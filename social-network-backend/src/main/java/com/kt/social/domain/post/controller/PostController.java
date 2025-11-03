@@ -21,6 +21,14 @@ public class PostController {
 
     private final PostService postService;
 
+    @GetMapping("/feed")
+    public ResponseEntity<PageVO<PostResponse>> getFeed(
+            @ParameterObject Pageable pageable,
+            @RequestParam(required = false) String filter
+    ) {
+        return ResponseEntity.ok(postService.getFeed(pageable, filter));
+    }
+
     @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PostResponse> create(@ModelAttribute PostRequest request) {
         return ResponseEntity.ok(postService.create(request));
