@@ -152,6 +152,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
     @Transactional(readOnly = true)
     public PageVO<UserProfileDto> getFriends(Long userId, String filter, Pageable pageable) {
         User user = getUser(userId);
+
         Specification<Friendship> base = (root, q, cb) -> cb.and(
                 cb.equal(root.get("status"), FriendshipStatus.FRIEND),
                 cb.or(
@@ -160,8 +161,20 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
                 )
         );
 
-        return filterEntity(Friendship.class, filter, pageable,
-                friendshipRepository, f -> userMapper.toDto(f.getReceiver()), base);
+        return filterEntity(
+                Friendship.class,
+                filter,
+                pageable,
+                friendshipRepository,
+                friendship -> {
+                    // Nếu user là sender -> friend là receiver, ngược lại
+                    User friend = friendship.getSender().equals(user)
+                            ? friendship.getReceiver()
+                            : friendship.getSender();
+                    return userMapper.toDto(friend);
+                },
+                base
+        );
     }
 
     @Override
