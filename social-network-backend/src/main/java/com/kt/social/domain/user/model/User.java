@@ -23,7 +23,7 @@ public class User extends BaseEntity {
 
     private Boolean isActive = true;
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private UserInfo userInfo;
 
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)

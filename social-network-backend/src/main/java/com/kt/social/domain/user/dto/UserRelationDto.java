@@ -1,5 +1,6 @@
 package com.kt.social.domain.user.dto;
 
+import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 
@@ -11,5 +12,5 @@ import lombok.experimental.SuperBuilder;
 public class UserRelationDto extends UserProfileDto {
     private boolean isFollowing;   // mình đang follow họ
     private boolean isFollowedBy;  // họ follow lại mình
-    private boolean isFriend;      // hai người là bạn bè
+    private FriendshipResponse friendship;
 }

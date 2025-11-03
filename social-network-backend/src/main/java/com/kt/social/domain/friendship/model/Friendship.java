@@ -17,11 +17,11 @@ public class Friendship extends BaseEntity {
 
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
-    private User user; // người gửi yêu cầu
+    private User sender; // người gửi yêu cầu
 
     @ManyToOne
     @JoinColumn(name = "friend_id", nullable = false)
-    private User friend; // người nhận yêu cầu
+    private User receiver; // người nhận yêu cầu
 
     @Enumerated(EnumType.STRING)
     private FriendshipStatus status;

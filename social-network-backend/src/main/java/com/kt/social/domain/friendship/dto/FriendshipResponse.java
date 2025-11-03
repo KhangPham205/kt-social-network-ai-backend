@@ -13,4 +13,6 @@ import lombok.NoArgsConstructor;
 public class FriendshipResponse {
     private String message;
     private FriendshipStatus status;
+    private Long senderId;
+    private Long receiverId;
 }

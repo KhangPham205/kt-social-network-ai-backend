@@ -11,30 +11,36 @@ import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.post.mapper.PostMapper;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
+import com.kt.social.domain.post.service.PostFilterService;
 import com.kt.social.domain.post.service.PostService;
 import com.kt.social.domain.user.model.User;
+import com.kt.social.domain.user.model.UserRela;
+import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.infra.storage.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
-public class PostServiceImpl implements PostService {
+public class PostServiceImpl  implements PostService {
 
+    private final UserRelaRepository userRelaRepository;
     private final UserCredentialRepository credRepo;
     private final FriendshipRepository friendshipRepository;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final StorageService storageService;
+    private final PostFilterService postFilterService;
     private final PostMapper postMapper;
 
     @Override
@@ -72,19 +78,7 @@ public class PostServiceImpl implements PostService {
 
         Page<Post> page = postRepository.findByAuthor(targetUser, pageable);
 
-        List<PostResponse> visiblePosts = page.stream()
-                .map(post -> toResponseWithAccessCheck(viewer, post))
-                .filter(Objects::nonNull) // lọc bỏ bài không xem được
-                .toList();
-
-        return PageVO.<PostResponse>builder()
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .numberOfElements(visiblePosts.size())
-                .content(visiblePosts)
-                .build();
+        return getPostResponsePageVO(viewer, page);
     }
 
     @Override
@@ -93,19 +87,7 @@ public class PostServiceImpl implements PostService {
         User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
         Page<Post> page = postRepository.findByAuthor(current, pageable);
 
-        List<PostResponse> visiblePosts = page.stream()
-                .map(post -> toResponseWithAccessCheck(current, post))
-                .filter(Objects::nonNull)
-                .toList();
-
-        return PageVO.<PostResponse>builder()
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .numberOfElements(visiblePosts.size())
-                .content(visiblePosts)
-                .build();
+        return getPostResponsePageVO(current, page);
     }
 
     @Override
@@ -143,6 +125,48 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public PageVO<PostResponse> getFeed(Pageable pageable, String filter) {
+        User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
+
+        // 1️⃣ Lấy danh sách bạn bè (hai chiều)
+        var friends = friendshipRepository.findAllAcceptedFriends(current);
+
+        // 2️⃣ Lấy danh sách người mình theo dõi
+        var followings = userRelaRepository.findByFollower(current)
+                .stream()
+                .map(UserRela::getFollowing)
+                .toList();
+
+        // 3️⃣ Gộp tất cả ID hợp lệ (bao gồm chính current)
+        var authorIds = Stream.concat(
+                        Stream.concat(friends.stream(), followings.stream()),
+                        Stream.of(current)
+                )
+                .map(User::getId)
+                .distinct()
+                .toList();
+
+        // 4️⃣ BaseSpec — lọc các bài viết của user hợp lệ
+        Specification<Post> baseSpec = (root, query, cb) -> {
+            query.distinct(true); // tránh duplicate khi join
+            return root.get("author").get("id").in(authorIds);
+        };
+
+        // 5️⃣ Gọi BaseFilterService (qua postFilterService)
+        PageVO<PostResponse> pageVO = postFilterService.filterEntity(
+                Post.class,
+                (filter == null || filter.isBlank()) ? null : filter,
+                pageable,
+                postRepository,
+                post -> toResponseWithAccessCheck(current, post),
+                baseSpec
+        );
+
+        return pageVO;
+    }
+
+    @Override
     @Transactional
     public void deletePost(Long postId) {
         Post original = postRepository.findById(postId)
@@ -166,8 +190,8 @@ public class PostServiceImpl implements PostService {
 
         return switch (original.getAccessModifier()) {
             case PUBLIC -> true;
-            case FRIENDS -> friendshipRepository.existsByUserAndFriendAndStatus(viewer, original.getAuthor(), FriendshipStatus.ACCEPTED)
-                    || friendshipRepository.existsByUserAndFriendAndStatus(original.getAuthor(), viewer, FriendshipStatus.ACCEPTED);
+            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, original.getAuthor(), FriendshipStatus.ACCEPTED)
+                    || friendshipRepository.existsBySenderAndReceiverAndStatus(original.getAuthor(), viewer, FriendshipStatus.ACCEPTED);
             default -> false;
         };
     }
@@ -190,5 +214,22 @@ public class PostServiceImpl implements PostService {
             dto.setSharedPost(null);
         }
         return dto;
+    }
+
+    @Transactional
+    protected PageVO<PostResponse> getPostResponsePageVO(User current, Page<Post> page) {
+        List<PostResponse> visiblePosts = page.stream()
+                .map(post -> toResponseWithAccessCheck(current, post))
+                .filter(Objects::nonNull)
+                .toList();
+
+        return PageVO.<PostResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(visiblePosts.size())
+                .content(visiblePosts)
+                .build();
     }
 }

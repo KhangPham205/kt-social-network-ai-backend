@@ -1,24 +1,27 @@
 package com.kt.social.domain.friendship.service;
 
+import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
+import com.kt.social.domain.friendship.model.Friendship;
 import com.kt.social.domain.user.dto.UserProfileDto;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
 
 public interface FriendshipService {
     FriendshipResponse sendRequest(Long userId, Long targetId);
-    FriendshipResponse acceptRequest(Long userId, Long requesterId);
-    FriendshipResponse rejectRequest(Long userId, Long requesterId);
+    FriendshipResponse acceptRequest(Long senderId, Long receiverId);
+    FriendshipResponse rejectRequest(Long senderId, Long receiverId);
     FriendshipResponse unfriend(Long userId, Long friendId);
 
     FriendshipResponse blockUser(Long userId, Long targetId);
     FriendshipResponse unblockUser(Long userId, Long targetId);
 
-    List<UserProfileDto> getPendingRequests(Long userId);
-    List<UserProfileDto> getBlockedUsers(Long userId);
-
     FriendshipResponse unsendRequest(Long userId, Long targetId);
-    List<UserProfileDto> getSentRequests(Long userId);
 
-    List<UserProfileDto> getFriends(Long userId);
+    PageVO<UserProfileDto> getFriends(Long userId, String filter, Pageable pageable);
+    PageVO<UserProfileDto> getPendingRequests(Long userId, String filter, Pageable pageable);
+    PageVO<UserProfileDto> getSentRequests(Long userId, String filter, Pageable pageable);
+    PageVO<UserProfileDto> getBlockedUsers(Long userId, String filter, Pageable pageable);
 }

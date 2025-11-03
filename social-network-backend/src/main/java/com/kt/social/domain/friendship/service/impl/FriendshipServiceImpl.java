@@ -1,5 +1,7 @@
 package com.kt.social.domain.friendship.service.impl;
 
+import com.kt.social.common.service.BaseFilterService;
+import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.model.Friendship;
@@ -10,243 +12,216 @@ import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class FriendshipServiceImpl implements FriendshipService {
+public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserProfileDto> implements FriendshipService {
+
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
     private final UserMapper userMapper;
 
+    // --------------------------- Friend Actions ---------------------------
+
     @Override
     @Transactional
     public FriendshipResponse sendRequest(Long userId, Long targetId) {
-        if (userId.equals(targetId)) {
+        if (userId.equals(targetId))
             throw new IllegalArgumentException("You cannot send a friend request to yourself");
-        }
 
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
-        User friend = userRepository.findById(targetId).orElseThrow(() -> new RuntimeException("Target user not found"));
+        User sender = getUser(userId);
+        User receiver = getUser(targetId);
 
-        Optional<Friendship> existing = friendshipRepository.findByUserAndFriend(user, friend)
-                .or(() -> friendshipRepository.findByUserAndFriend(friend, user));
+        Optional<Friendship> existing = friendshipRepository.findBySenderAndReceiver(sender, receiver)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(receiver, sender));
 
         if (existing.isPresent()) {
             Friendship f = existing.get();
             switch (f.getStatus()) {
                 case BLOCKED -> throw new RuntimeException("You cannot send a request to a blocked user");
                 case PENDING -> throw new RuntimeException("Friend request already pending");
-                case ACCEPTED -> throw new RuntimeException("You are already friends");
+                case FRIEND -> throw new RuntimeException("You are already friends");
                 case REJECTED -> {
-                    // cho phép gửi lại, nhưng cập nhật thay vì tạo mới
-                    f.setUser(user);
-                    f.setFriend(friend);
+                    f.setSender(sender);
+                    f.setReceiver(receiver);
                     f.setStatus(FriendshipStatus.PENDING);
                     friendshipRepository.save(f);
-                    return new FriendshipResponse("Friend request re-sent", FriendshipStatus.PENDING);
+                    return new FriendshipResponse("Friend request re-sent", FriendshipStatus.PENDING, userId, targetId);
                 }
             }
         }
 
         friendshipRepository.save(Friendship.builder()
-                .user(user)
-                .friend(friend)
+                .sender(sender)
+                .receiver(receiver)
                 .status(FriendshipStatus.PENDING)
                 .build());
 
-        return new FriendshipResponse("Friend request sent", FriendshipStatus.PENDING);
+        return new FriendshipResponse("Friend request sent", FriendshipStatus.PENDING, userId, targetId);
     }
 
     @Override
     @Transactional
-    public FriendshipResponse acceptRequest(Long userId, Long requesterId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        User requester = userRepository.findById(requesterId).orElseThrow();
-
-        Friendship f = friendshipRepository.findByUserAndFriend(requester, user)
-                .orElseThrow(() -> new RuntimeException("No request found"));
-
-        f.setStatus(FriendshipStatus.ACCEPTED);
+    public FriendshipResponse acceptRequest(Long senderId, Long receiverId) {
+        Friendship f = getFriendship(senderId, receiverId);
+        f.setStatus(FriendshipStatus.FRIEND);
         friendshipRepository.save(f);
-
-        // tạo chiều ngược nếu chưa có
-        friendshipRepository.findByUserAndFriend(user, requester)
-                .orElseGet(() -> friendshipRepository.save(Friendship.builder()
-                        .user(user)
-                        .friend(requester)
-                        .status(FriendshipStatus.ACCEPTED)
-                        .build()));
-
-        return new FriendshipResponse("Friend request accepted", FriendshipStatus.ACCEPTED);
+        return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }
 
     @Override
     @Transactional
-    public FriendshipResponse rejectRequest(Long userId, Long requesterId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        User requester = userRepository.findById(requesterId).orElseThrow();
-
-        Friendship f = friendshipRepository.findByUserAndFriend(requester, user)
-                .orElseThrow(() -> new RuntimeException("No friend request found"));
-
-        f.setStatus(FriendshipStatus.REJECTED);
-        friendshipRepository.save(f);
-
-        // Xóa chiều ngược lại nếu có
-        friendshipRepository.findByUserAndFriend(user, requester)
+    public FriendshipResponse rejectRequest(Long senderId, Long receiverId) {
+        friendshipRepository.findBySenderAndReceiver(getUser(senderId), getUser(receiverId))
                 .ifPresent(friendshipRepository::delete);
-
-        return new FriendshipResponse("Friend request rejected", FriendshipStatus.REJECTED);
+        return new FriendshipResponse("Friend request rejected", FriendshipStatus.REJECTED, senderId, receiverId);
     }
 
     @Override
     @Transactional
     public FriendshipResponse unfriend(Long userId, Long friendId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        User friend = userRepository.findById(friendId).orElseThrow();
+        User u1 = getUser(userId);
+        User u2 = getUser(friendId);
 
-        friendshipRepository.findByUserAndFriend(user, friend)
-                .ifPresent(friendshipRepository::delete);
-        friendshipRepository.findByUserAndFriend(friend, user)
-                .ifPresent(friendshipRepository::delete);
+        friendshipRepository.findBySenderAndReceiver(u1, u2).ifPresent(friendshipRepository::delete);
+        friendshipRepository.findBySenderAndReceiver(u2, u1).ifPresent(friendshipRepository::delete);
 
-        return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED);
+        return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED, userId, friendId);
     }
 
     @Override
     @Transactional
     public FriendshipResponse blockUser(Long userId, Long targetId) {
-        if (userId.equals(targetId)) {
+        if (userId.equals(targetId))
             throw new RuntimeException("You cannot block yourself");
-        }
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        User target = userRepository.findById(targetId)
-                .orElseThrow(() -> new RuntimeException("Target user not found"));
+        User user = getUser(userId);
+        User target = getUser(targetId);
 
-        // Tìm quan hệ hiện có giữa 2 người
-        Optional<Friendship> existing = friendshipRepository.findByUserAndFriend(user, target)
-                .or(() -> friendshipRepository.findByUserAndFriend(target, user));
+        Friendship f = friendshipRepository.findBySenderAndReceiver(user, target)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(target, user))
+                .orElse(Friendship.builder().sender(user).receiver(target).build());
 
-        if (existing.isPresent()) {
-            Friendship f = existing.get();
-            f.setUser(user);  // người block
-            f.setFriend(target);
-            f.setStatus(FriendshipStatus.BLOCKED);
-            friendshipRepository.save(f);
-            return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED);
-        }
+        f.setSender(user);
+        f.setReceiver(target);
+        f.setStatus(FriendshipStatus.BLOCKED);
+        friendshipRepository.save(f);
 
-        // Chưa có, tạo mới
-        Friendship block = Friendship.builder()
-                .user(user)
-                .friend(target)
-                .status(FriendshipStatus.BLOCKED)
-                .build();
-
-        friendshipRepository.save(block);
-        return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED);
+        return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED, userId, targetId);
     }
 
     @Override
     @Transactional
     public FriendshipResponse unblockUser(Long userId, Long targetId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        User target = userRepository.findById(targetId)
-                .orElseThrow(() -> new RuntimeException("Target user not found"));
-
-        Friendship friendship = friendshipRepository.findByUserAndFriend(user, target)
+        Friendship friendship = friendshipRepository.findBySenderAndReceiver(getUser(userId), getUser(targetId))
                 .orElseThrow(() -> new RuntimeException("No blocked relationship found"));
 
-        if (friendship.getStatus() != FriendshipStatus.BLOCKED) {
+        if (friendship.getStatus() != FriendshipStatus.BLOCKED)
             throw new RuntimeException("This user is not blocked");
-        }
 
         friendshipRepository.delete(friendship);
-        return new FriendshipResponse("User unblocked successfully", FriendshipStatus.REJECTED);
-    }
-
-    @Override
-    public List<UserProfileDto> getPendingRequests(Long userId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> requests = friendshipRepository.findByFriendAndStatus(user, FriendshipStatus.PENDING);
-        return requests.stream()
-                .map(Friendship::getUser) // người gửi lời mời
-                .map(userMapper::toDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<UserProfileDto> getBlockedUsers(Long userId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> blocked = friendshipRepository.findByUserAndStatus(user, FriendshipStatus.BLOCKED);
-        return blocked.stream()
-                .map(Friendship::getFriend)
-                .map(userMapper::toDto)
-                .collect(Collectors.toList());
+        return new FriendshipResponse("User unblocked successfully", FriendshipStatus.REJECTED, userId, targetId);
     }
 
     @Override
     @Transactional
     public FriendshipResponse unsendRequest(Long userId, Long targetId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        User friend = userRepository.findById(targetId)
-                .orElseThrow(() -> new RuntimeException("Target user not found"));
+        Friendship f = friendshipRepository.findBySenderAndReceiver(getUser(userId), getUser(targetId))
+                .or(() -> friendshipRepository.findBySenderAndReceiver(getUser(targetId), getUser(userId)))
+                .orElseThrow(() -> new RuntimeException("No friend request found"));
 
-        // Tìm lời mời giữa 2 người
-        Optional<Friendship> existing = friendshipRepository.findByUserAndFriend(user, friend)
-                .or(() -> friendshipRepository.findByUserAndFriend(friend, user));
-
-        if (existing.isEmpty()) {
-            throw new RuntimeException("No friend request found between users");
-        }
-
-        Friendship friendship = existing.get();
-
-        // Chỉ người gửi mới được hủy lời mời
-        if (!friendship.getUser().getId().equals(userId)) {
+        if (!f.getSender().getId().equals(userId))
             throw new RuntimeException("You cannot unsend a request you didn’t send");
-        }
 
-        // Chỉ hủy nếu trạng thái là PENDING
-        if (friendship.getStatus() != FriendshipStatus.PENDING) {
+        if (f.getStatus() != FriendshipStatus.PENDING)
             throw new RuntimeException("Cannot unsend a request that is not pending");
-        }
 
-        friendshipRepository.delete(friendship);
-        return new FriendshipResponse("Friend request unsent", null);
+        friendshipRepository.delete(f);
+        return new FriendshipResponse("Friend request unsent", null, userId, targetId);
+    }
+
+    // --------------------------- Pagination + Filter (RSQL) ---------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> getFriends(Long userId, String filter, Pageable pageable) {
+        User user = getUser(userId);
+
+        Specification<Friendship> base = (root, q, cb) -> cb.and(
+                cb.equal(root.get("status"), FriendshipStatus.FRIEND),
+                cb.or(
+                        cb.equal(root.get("sender"), user),
+                        cb.equal(root.get("receiver"), user)
+                )
+        );
+
+        return filterEntity(
+                Friendship.class,
+                filter,
+                pageable,
+                friendshipRepository,
+                friendship -> {
+                    // Nếu user là sender -> friend là receiver, ngược lại
+                    User friend = friendship.getSender().equals(user)
+                            ? friendship.getReceiver()
+                            : friendship.getSender();
+                    return userMapper.toDto(friend);
+                },
+                base
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<UserProfileDto> getSentRequests(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    public PageVO<UserProfileDto> getPendingRequests(Long userId, String filter, Pageable pageable) {
+        User user = getUser(userId);
+        Specification<Friendship> base = (root, q, cb) ->
+                cb.and(cb.equal(root.get("receiver"), user),
+                        cb.equal(root.get("status"), FriendshipStatus.PENDING));
 
-        List<Friendship> sentRequests = friendshipRepository.findByUserAndStatus(user, FriendshipStatus.PENDING);
-
-        return sentRequests.stream()
-                .map(Friendship::getFriend)
-                .map(userMapper::toDto)
-                .toList();
+        return filterEntity(Friendship.class, filter, pageable,
+                friendshipRepository, f -> userMapper.toDto(f.getSender()), base);
     }
 
     @Override
-    public List<UserProfileDto> getFriends(Long userId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> friendships = friendshipRepository.findByUserAndStatus(user, FriendshipStatus.ACCEPTED);
-        return friendships.stream()
-                .map(Friendship::getFriend)
-                .map(userMapper::toDto)
-                .collect(Collectors.toList());
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> getSentRequests(Long userId, String filter, Pageable pageable) {
+        User user = getUser(userId);
+        Specification<Friendship> base = (root, q, cb) ->
+                cb.and(cb.equal(root.get("sender"), user),
+                        cb.equal(root.get("status"), FriendshipStatus.PENDING));
+
+        return filterEntity(Friendship.class, filter, pageable,
+                friendshipRepository, f -> userMapper.toDto(f.getReceiver()), base);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> getBlockedUsers(Long userId, String filter, Pageable pageable) {
+        User user = getUser(userId);
+        Specification<Friendship> base = (root, q, cb) ->
+                cb.and(cb.equal(root.get("sender"), user),
+                        cb.equal(root.get("status"), FriendshipStatus.BLOCKED));
+
+        return filterEntity(Friendship.class, filter, pageable,
+                friendshipRepository, f -> userMapper.toDto(f.getReceiver()), base);
+    }
+
+    // --------------------------- Helpers ---------------------------
+
+    private User getUser(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    private Friendship getFriendship(Long senderId, Long receiverId) {
+        return friendshipRepository.findBySenderAndReceiver(getUser(senderId), getUser(receiverId))
+                .orElseThrow(() -> new RuntimeException("Friendship not found"));
     }
 }

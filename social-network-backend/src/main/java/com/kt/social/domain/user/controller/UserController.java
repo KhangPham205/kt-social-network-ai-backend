@@ -21,6 +21,14 @@ public class UserController {
 
     private final UserService userService;
 
+    @GetMapping("/search")
+    public ResponseEntity<PageVO<UserProfileDto>> searchUsers(
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(userService.searchUsers(filter, pageable));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<UserProfileDto> getUserProfile(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getProfile(id));
@@ -69,13 +77,8 @@ public class UserController {
         return ResponseEntity.ok(userService.getFollowingPaged(id, pageable));
     }
 
-    @GetMapping("/{id}/relation")
-    public ResponseEntity<UserRelationDto> getRelationWith(@PathVariable Long id) {
+    @GetMapping("/{id}/relation-status")
+    public ResponseEntity<UserRelationDto> getRelationStatus(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getRelationWithUser(id));
-    }
-
-    @GetMapping("/{id}/friendship")
-    public ResponseEntity<FriendshipStatusDto> getFriendshipWith(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getFriendshipStatusWithUser(id));
     }
 }
