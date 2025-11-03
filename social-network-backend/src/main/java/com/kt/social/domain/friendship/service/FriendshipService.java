@@ -7,8 +7,8 @@ import java.util.List;
 
 public interface FriendshipService {
     FriendshipResponse sendRequest(Long userId, Long targetId);
-    FriendshipResponse acceptRequest(Long userId, Long requesterId);
-    FriendshipResponse rejectRequest(Long userId, Long requesterId);
+    FriendshipResponse acceptRequest(Long senderId, Long receiverId);
+    FriendshipResponse rejectRequest(Long senderId, Long receiverId);
     FriendshipResponse unfriend(Long userId, Long friendId);
 
     FriendshipResponse blockUser(Long userId, Long targetId);

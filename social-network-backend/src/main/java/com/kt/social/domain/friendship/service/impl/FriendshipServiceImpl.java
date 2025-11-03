@@ -34,8 +34,8 @@ public class FriendshipServiceImpl implements FriendshipService {
         User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
         User friend = userRepository.findById(targetId).orElseThrow(() -> new RuntimeException("Target user not found"));
 
-        Optional<Friendship> existing = friendshipRepository.findByUserAndFriend(user, friend)
-                .or(() -> friendshipRepository.findByUserAndFriend(friend, user));
+        Optional<Friendship> existing = friendshipRepository.findBySenderAndReceiver(user, friend)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(friend, user));
 
         if (existing.isPresent()) {
             Friendship f = existing.get();
@@ -45,8 +45,8 @@ public class FriendshipServiceImpl implements FriendshipService {
                 case ACCEPTED -> throw new RuntimeException("You are already friends");
                 case REJECTED -> {
                     // cho phép gửi lại, nhưng cập nhật thay vì tạo mới
-                    f.setUser(user);
-                    f.setFriend(friend);
+                    f.setSender(user);
+                    f.setReceiver(friend);
                     f.setStatus(FriendshipStatus.PENDING);
                     friendshipRepository.save(f);
                     return new FriendshipResponse("Friend request re-sent", FriendshipStatus.PENDING);
@@ -55,8 +55,8 @@ public class FriendshipServiceImpl implements FriendshipService {
         }
 
         friendshipRepository.save(Friendship.builder()
-                .user(user)
-                .friend(friend)
+                .sender(user)
+                .receiver(friend)
                 .status(FriendshipStatus.PENDING)
                 .build());
 
@@ -65,41 +65,26 @@ public class FriendshipServiceImpl implements FriendshipService {
 
     @Override
     @Transactional
-    public FriendshipResponse acceptRequest(Long userId, Long requesterId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        User requester = userRepository.findById(requesterId).orElseThrow();
+    public FriendshipResponse acceptRequest(Long senderId, Long receiverId) {
+        User sender = userRepository.findById(senderId).orElseThrow();
+        User receiver = userRepository.findById(receiverId).orElseThrow();
 
-        Friendship f = friendshipRepository.findByUserAndFriend(requester, user)
+        Friendship f = friendshipRepository.findBySenderAndReceiver(sender, receiver)
                 .orElseThrow(() -> new RuntimeException("No request found"));
 
-        f.setStatus(FriendshipStatus.ACCEPTED);
+        f.setStatus(FriendshipStatus.FRIEND);
         friendshipRepository.save(f);
 
-        // tạo chiều ngược nếu chưa có
-        friendshipRepository.findByUserAndFriend(user, requester)
-                .orElseGet(() -> friendshipRepository.save(Friendship.builder()
-                        .user(user)
-                        .friend(requester)
-                        .status(FriendshipStatus.ACCEPTED)
-                        .build()));
-
-        return new FriendshipResponse("Friend request accepted", FriendshipStatus.ACCEPTED);
+        return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND);
     }
 
     @Override
     @Transactional
-    public FriendshipResponse rejectRequest(Long userId, Long requesterId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        User requester = userRepository.findById(requesterId).orElseThrow();
+    public FriendshipResponse rejectRequest(Long senderId, Long receiverId) {
+        User sender = userRepository.findById(senderId).orElseThrow();
+        User receiver = userRepository.findById(receiverId).orElseThrow();
 
-        Friendship f = friendshipRepository.findByUserAndFriend(requester, user)
-                .orElseThrow(() -> new RuntimeException("No friend request found"));
-
-        f.setStatus(FriendshipStatus.REJECTED);
-        friendshipRepository.save(f);
-
-        // Xóa chiều ngược lại nếu có
-        friendshipRepository.findByUserAndFriend(user, requester)
+        friendshipRepository.findBySenderAndReceiver(sender, receiver)
                 .ifPresent(friendshipRepository::delete);
 
         return new FriendshipResponse("Friend request rejected", FriendshipStatus.REJECTED);
@@ -111,9 +96,9 @@ public class FriendshipServiceImpl implements FriendshipService {
         User user = userRepository.findById(userId).orElseThrow();
         User friend = userRepository.findById(friendId).orElseThrow();
 
-        friendshipRepository.findByUserAndFriend(user, friend)
+        friendshipRepository.findBySenderAndReceiver(user, friend)
                 .ifPresent(friendshipRepository::delete);
-        friendshipRepository.findByUserAndFriend(friend, user)
+        friendshipRepository.findBySenderAndReceiver(friend, user)
                 .ifPresent(friendshipRepository::delete);
 
         return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED);
@@ -132,13 +117,13 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .orElseThrow(() -> new RuntimeException("Target user not found"));
 
         // Tìm quan hệ hiện có giữa 2 người
-        Optional<Friendship> existing = friendshipRepository.findByUserAndFriend(user, target)
-                .or(() -> friendshipRepository.findByUserAndFriend(target, user));
+        Optional<Friendship> existing = friendshipRepository.findBySenderAndReceiver(user, target)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(target, user));
 
         if (existing.isPresent()) {
             Friendship f = existing.get();
-            f.setUser(user);  // người block
-            f.setFriend(target);
+            f.setSender(user);  // người block
+            f.setReceiver(target);
             f.setStatus(FriendshipStatus.BLOCKED);
             friendshipRepository.save(f);
             return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED);
@@ -146,8 +131,8 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         // Chưa có, tạo mới
         Friendship block = Friendship.builder()
-                .user(user)
-                .friend(target)
+                .sender(user)
+                .receiver(target)
                 .status(FriendshipStatus.BLOCKED)
                 .build();
 
@@ -163,7 +148,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         User target = userRepository.findById(targetId)
                 .orElseThrow(() -> new RuntimeException("Target user not found"));
 
-        Friendship friendship = friendshipRepository.findByUserAndFriend(user, target)
+        Friendship friendship = friendshipRepository.findBySenderAndReceiver(user, target)
                 .orElseThrow(() -> new RuntimeException("No blocked relationship found"));
 
         if (friendship.getStatus() != FriendshipStatus.BLOCKED) {
@@ -177,9 +162,9 @@ public class FriendshipServiceImpl implements FriendshipService {
     @Override
     public List<UserProfileDto> getPendingRequests(Long userId) {
         User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> requests = friendshipRepository.findByFriendAndStatus(user, FriendshipStatus.PENDING);
+        List<Friendship> requests = friendshipRepository.findByReceiverAndStatus(user, FriendshipStatus.PENDING);
         return requests.stream()
-                .map(Friendship::getUser) // người gửi lời mời
+                .map(Friendship::getSender) // người gửi lời mời
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -187,9 +172,9 @@ public class FriendshipServiceImpl implements FriendshipService {
     @Override
     public List<UserProfileDto> getBlockedUsers(Long userId) {
         User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> blocked = friendshipRepository.findByUserAndStatus(user, FriendshipStatus.BLOCKED);
+        List<Friendship> blocked = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.BLOCKED);
         return blocked.stream()
-                .map(Friendship::getFriend)
+                .map(Friendship::getReceiver)
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -203,8 +188,8 @@ public class FriendshipServiceImpl implements FriendshipService {
                 .orElseThrow(() -> new RuntimeException("Target user not found"));
 
         // Tìm lời mời giữa 2 người
-        Optional<Friendship> existing = friendshipRepository.findByUserAndFriend(user, friend)
-                .or(() -> friendshipRepository.findByUserAndFriend(friend, user));
+        Optional<Friendship> existing = friendshipRepository.findBySenderAndReceiver(user, friend)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(friend, user));
 
         if (existing.isEmpty()) {
             throw new RuntimeException("No friend request found between users");
@@ -213,7 +198,7 @@ public class FriendshipServiceImpl implements FriendshipService {
         Friendship friendship = existing.get();
 
         // Chỉ người gửi mới được hủy lời mời
-        if (!friendship.getUser().getId().equals(userId)) {
+        if (!friendship.getSender().getId().equals(userId)) {
             throw new RuntimeException("You cannot unsend a request you didn’t send");
         }
 
@@ -232,10 +217,10 @@ public class FriendshipServiceImpl implements FriendshipService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        List<Friendship> sentRequests = friendshipRepository.findByUserAndStatus(user, FriendshipStatus.PENDING);
+        List<Friendship> sentRequests = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.PENDING);
 
         return sentRequests.stream()
-                .map(Friendship::getFriend)
+                .map(Friendship::getReceiver)
                 .map(userMapper::toDto)
                 .toList();
     }
@@ -243,9 +228,9 @@ public class FriendshipServiceImpl implements FriendshipService {
     @Override
     public List<UserProfileDto> getFriends(Long userId) {
         User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> friendships = friendshipRepository.findByUserAndStatus(user, FriendshipStatus.ACCEPTED);
+        List<Friendship> friendships = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.ACCEPTED);
         return friendships.stream()
-                .map(Friendship::getFriend)
+                .map(Friendship::getReceiver)
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
     }

@@ -69,13 +69,8 @@ public class UserController {
         return ResponseEntity.ok(userService.getFollowingPaged(id, pageable));
     }
 
-    @GetMapping("/{id}/relation")
-    public ResponseEntity<UserRelationDto> getRelationWith(@PathVariable Long id) {
+    @GetMapping("/{id}/relation-status")
+    public ResponseEntity<UserRelationDto> getRelationStatus(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getRelationWithUser(id));
-    }
-
-    @GetMapping("/{id}/friendship")
-    public ResponseEntity<FriendshipStatusDto> getFriendshipWith(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getFriendshipStatusWithUser(id));
     }
 }

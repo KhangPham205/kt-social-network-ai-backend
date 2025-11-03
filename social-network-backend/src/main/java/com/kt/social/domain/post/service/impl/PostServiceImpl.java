@@ -166,8 +166,8 @@ public class PostServiceImpl implements PostService {
 
         return switch (original.getAccessModifier()) {
             case PUBLIC -> true;
-            case FRIENDS -> friendshipRepository.existsByUserAndFriendAndStatus(viewer, original.getAuthor(), FriendshipStatus.ACCEPTED)
-                    || friendshipRepository.existsByUserAndFriendAndStatus(original.getAuthor(), viewer, FriendshipStatus.ACCEPTED);
+            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, original.getAuthor(), FriendshipStatus.ACCEPTED)
+                    || friendshipRepository.existsBySenderAndReceiverAndStatus(original.getAuthor(), viewer, FriendshipStatus.ACCEPTED);
             default -> false;
         };
     }

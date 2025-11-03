@@ -36,14 +36,14 @@ public class FriendshipController {
     @PostMapping("/accept")
     public ResponseEntity<FriendshipResponse> acceptRequest(@RequestParam Long requesterId) {
         Long currentUserId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(friendshipService.acceptRequest(currentUserId, requesterId));
+        return ResponseEntity.ok(friendshipService.acceptRequest(requesterId, currentUserId));
     }
 
     // Từ chối lời mời
     @PostMapping("/reject")
     public ResponseEntity<FriendshipResponse> rejectRequest(@RequestParam Long requesterId) {
         Long currentUserId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(friendshipService.rejectRequest(currentUserId, requesterId));
+        return ResponseEntity.ok(friendshipService.rejectRequest(requesterId, currentUserId));
     }
 
     // Hủy kết bạn

@@ -4,7 +4,7 @@ import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.friendship.enums.FriendshipStatus;
+import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.mapper.UserMapper;
@@ -20,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -128,28 +127,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public List<UserProfileDto> getFollowers(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        return userRelaRepository.findByFollowing(user)
-                .stream()
-                .map(UserRela::getFollower)
-                .map(userMapper::toDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<UserProfileDto> getFollowing(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        return userRelaRepository.findByFollower(user)
-                .stream()
-                .map(UserRela::getFollowing)
-                .map(userMapper::toDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
     @Transactional
     public PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable) {
         User viewer = getCurrentUser();
@@ -227,68 +204,76 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public UserRelationDto getRelationWithUser(Long targetUserId) {
-        User viewer = getCurrentUser();
-        User target = userRepository.findById(targetUserId)
-                .orElseThrow(() -> new RuntimeException("Target user not found"));
+    public UserRelationDto getRelationWithUser(Long targetId) {
+        User current = getCurrentUser();
+        User target = userRepository.findById(targetId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        boolean isFollowing = userRelaRepository.existsByFollowerAndFollowing(viewer, target);
-        boolean isFollowedBy = userRelaRepository.existsByFollowerAndFollowing(target, viewer);
-
-        boolean isFriend = friendshipRepository.existsByUserAndFriendAndStatus(viewer, target, FriendshipStatus.ACCEPTED)
-                || friendshipRepository.existsByUserAndFriendAndStatus(target, viewer, FriendshipStatus.ACCEPTED);
-
-        return UserRelationDto.builder()
-                .id(target.getId())
-                .displayName(target.getDisplayName())
-                .avatarUrl(target.getAvatarUrl())
-                .isActive(target.getIsActive())
-                .bio(target.getUserInfo() != null ? target.getUserInfo().getBio() : null)
-                .favorites(target.getUserInfo() != null ? target.getUserInfo().getFavorites() : null)
-                .dateOfBirth(target.getUserInfo() != null ? target.getUserInfo().getDateOfBirth() : null)
-                .isFollowing(isFollowing)
-                .isFollowedBy(isFollowedBy)
-                .isFriend(isFriend)
-                .build();
+        return mapToRelationDto(current, target);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public FriendshipStatusDto getFriendshipStatusWithUser(Long targetUserId) {
-        User viewer = getCurrentUser();
-        User target = userRepository.findById(targetUserId)
-                .orElseThrow(() -> new RuntimeException("Target user not found"));
+//    @Override
+//    @Transactional(readOnly = true)
+//    public FriendshipStatusDto getFriendshipStatusWithUser(Long targetUserId) {
+//        User viewer = getCurrentUser();
+//        User target = userRepository.findById(targetUserId)
+//                .orElseThrow(() -> new RuntimeException("Target user not found"));
+//
+//        var friendshipOpt = friendshipRepository.findByUserAndFriend(viewer, target)
+//                .or(() -> friendshipRepository.findByUserAndFriend(target, viewer));
+//
+//        if (friendshipOpt.isEmpty()) {
+//            return FriendshipStatusDto.builder()
+//                    .exists(false)
+//                    .status(null)
+//                    .build();
+//        }
+//
+//        var friendship = friendshipOpt.get();
+//
+//        return FriendshipStatusDto.builder()
+//                .exists(true)
+//                .status(friendship.getStatus())
+//                .requesterId(friendship.getUser().getId())
+//                .receiverId(friendship.getFriend().getId())
+//                .build();
+//    }
 
-        var friendshipOpt = friendshipRepository.findByUserAndFriend(viewer, target)
-                .or(() -> friendshipRepository.findByUserAndFriend(target, viewer));
-
-        if (friendshipOpt.isEmpty()) {
-            return FriendshipStatusDto.builder()
-                    .exists(false)
-                    .status(null)
-                    .build();
-        }
-
-        var friendship = friendshipOpt.get();
-
-        return FriendshipStatusDto.builder()
-                .exists(true)
-                .status(friendship.getStatus())
-                .requesterId(friendship.getUser().getId())
-                .receiverId(friendship.getFriend().getId())
-                .build();
-    }
+//    @Override
+//    public List<UserProfileDto> getFollowers(Long id) {
+//        User user = userRepository.findById(id)
+//                .orElseThrow(() -> new RuntimeException("User not found"));
+//        return userRelaRepository.findByFollowing(user)
+//                .stream()
+//                .map(UserRela::getFollower)
+//                .map(userMapper::toDto)
+//                .collect(Collectors.toList());
+//    }
+//
+//    @Override
+//    public List<UserProfileDto> getFollowing(Long id) {
+//        User user = userRepository.findById(id)
+//                .orElseThrow(() -> new RuntimeException("User not found"));
+//        return userRelaRepository.findByFollower(user)
+//                .stream()
+//                .map(UserRela::getFollowing)
+//                .map(userMapper::toDto)
+//                .collect(Collectors.toList());
+//    }
 
     // ========== Hàm tiện ích chuyển đổi User → UserRelationDto ==========
     private UserRelationDto mapToRelationDto(User viewer, User target) {
         boolean isFollowing = userRelaRepository.existsByFollowerAndFollowing(viewer, target);
         boolean isFollowedBy = userRelaRepository.existsByFollowerAndFollowing(target, viewer);
-        boolean isFriend =
-                friendshipRepository.existsByUserAndFriendAndStatus(viewer, target, FriendshipStatus.ACCEPTED)
-                        || friendshipRepository.existsByUserAndFriendAndStatus(target, viewer, FriendshipStatus.ACCEPTED);
 
-        // Lấy thông tin user đầy đủ từ mapper
+        var friendship = friendshipRepository.findBySenderAndReceiver(viewer, target)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(target, viewer))
+                .map(f -> FriendshipResponse.builder()
+                        .status(f.getStatus())
+                        .build())
+                .orElse(FriendshipResponse.builder().build()); // Empty response if no friendship exists
+
+        // Get full user profile from mapper
         UserProfileDto base = userMapper.toDto(target);
 
         return UserRelationDto.builder()
@@ -301,7 +286,7 @@ public class UserServiceImpl implements UserService {
                 .dateOfBirth(base.getDateOfBirth())
                 .isFollowing(isFollowing)
                 .isFollowedBy(isFollowedBy)
-                .isFriend(isFriend)
+                .friendship(friendship) // Use the properly built friendship response
                 .build();
     }
 }

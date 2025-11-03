@@ -12,15 +12,15 @@ import java.util.Optional;
 @Repository
 public interface FriendshipRepository extends JpaRepository<Friendship, Long> {
 
-    Optional<Friendship> findByUserAndFriend(User user, User friend);
+    Optional<Friendship> findBySenderAndReceiver(User sender, User receiver);
 
-    List<Friendship> findByUserAndStatus(User user, FriendshipStatus status);
+    List<Friendship> findBySenderAndStatus(User user, FriendshipStatus status);
 
-    List<Friendship> findByFriendAndStatus(User friend, FriendshipStatus status);
+    List<Friendship> findByReceiverAndStatus(User friend, FriendshipStatus status);
 
-    boolean existsByUserAndFriendAndStatus(User user, User friend, FriendshipStatus status);
+    boolean existsBySenderAndReceiverAndStatus(User user, User friend, FriendshipStatus status);
 
     default boolean existsByUserAndFriendAndStatusApproved(User user, User friend) {
-        return existsByUserAndFriendAndStatus(user, friend, FriendshipStatus.ACCEPTED);
+        return existsBySenderAndReceiverAndStatus(user, friend, FriendshipStatus.ACCEPTED);
     }
 }
