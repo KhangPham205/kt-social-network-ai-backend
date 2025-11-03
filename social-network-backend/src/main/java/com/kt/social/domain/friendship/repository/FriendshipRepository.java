@@ -3,6 +3,8 @@ package com.kt.social.domain.friendship.repository;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.model.Friendship;
 import com.kt.social.domain.user.model.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,9 +16,9 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Long> {
 
     Optional<Friendship> findBySenderAndReceiver(User sender, User receiver);
 
-    List<Friendship> findBySenderAndStatus(User user, FriendshipStatus status);
+    Page<Friendship> findBySenderAndStatus(User sender, FriendshipStatus status, Pageable pageable);
 
-    List<Friendship> findByReceiverAndStatus(User friend, FriendshipStatus status);
+    Page<Friendship> findByReceiverAndStatus(User receiver, FriendshipStatus status, Pageable pageable);
 
     boolean existsBySenderAndReceiverAndStatus(User user, User friend, FriendshipStatus status);
 

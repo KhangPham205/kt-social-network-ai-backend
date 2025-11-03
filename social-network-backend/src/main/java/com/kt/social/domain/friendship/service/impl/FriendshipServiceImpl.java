@@ -1,5 +1,6 @@
 package com.kt.social.domain.friendship.service.impl;
 
+import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.model.Friendship;
@@ -10,6 +11,8 @@ import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -160,23 +163,87 @@ public class FriendshipServiceImpl implements FriendshipService {
     }
 
     @Override
-    public List<UserProfileDto> getPendingRequests(Long userId) {
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> getFriends(Long userId, Pageable pageable) {
         User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> requests = friendshipRepository.findByReceiverAndStatus(user, FriendshipStatus.PENDING);
-        return requests.stream()
-                .map(Friendship::getSender) // người gửi lời mời
+        Page<Friendship> friendships = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.FRIEND, pageable);
+
+        List<UserProfileDto> content = friendships.getContent().stream()
+                .map(Friendship::getReceiver)
                 .map(userMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
+
+        return PageVO.<UserProfileDto>builder()
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .totalElements(friendships.getTotalElements())
+                .totalPages(friendships.getTotalPages())
+                .numberOfElements(friendships.getNumberOfElements())
+                .content(content)
+                .build();
     }
 
     @Override
-    public List<UserProfileDto> getBlockedUsers(Long userId) {
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> getPendingRequests(Long userId, Pageable pageable) {
         User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> blocked = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.BLOCKED);
-        return blocked.stream()
+        Page<Friendship> pending = friendshipRepository.findByReceiverAndStatus(user, FriendshipStatus.PENDING, pageable);
+
+        List<UserProfileDto> content = pending.getContent().stream()
+                .map(Friendship::getSender)
+                .map(userMapper::toDto)
+                .toList();
+
+        return PageVO.<UserProfileDto>builder()
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .totalElements(pending.getTotalElements())
+                .totalPages(pending.getTotalPages())
+                .numberOfElements(pending.getNumberOfElements())
+                .content(content)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> getSentRequests(Long userId, Pageable pageable) {
+        User user = userRepository.findById(userId).orElseThrow();
+        Page<Friendship> sent = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.PENDING, pageable);
+
+        List<UserProfileDto> content = sent.getContent().stream()
                 .map(Friendship::getReceiver)
                 .map(userMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
+
+        return PageVO.<UserProfileDto>builder()
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .totalElements(sent.getTotalElements())
+                .totalPages(sent.getTotalPages())
+                .numberOfElements(sent.getNumberOfElements())
+                .content(content)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<UserProfileDto> getBlockedUsers(Long userId, Pageable pageable) {
+        User user = userRepository.findById(userId).orElseThrow();
+        Page<Friendship> blocked = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.BLOCKED, pageable);
+
+        List<UserProfileDto> content = blocked.getContent().stream()
+                .map(Friendship::getReceiver)
+                .map(userMapper::toDto)
+                .toList();
+
+        return PageVO.<UserProfileDto>builder()
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .totalElements(blocked.getTotalElements())
+                .totalPages(blocked.getTotalPages())
+                .numberOfElements(blocked.getNumberOfElements())
+                .content(content)
+                .build();
     }
 
     @Override
@@ -209,29 +276,5 @@ public class FriendshipServiceImpl implements FriendshipService {
 
         friendshipRepository.delete(friendship);
         return new FriendshipResponse("Friend request unsent", null);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<UserProfileDto> getSentRequests(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        List<Friendship> sentRequests = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.PENDING);
-
-        return sentRequests.stream()
-                .map(Friendship::getReceiver)
-                .map(userMapper::toDto)
-                .toList();
-    }
-
-    @Override
-    public List<UserProfileDto> getFriends(Long userId) {
-        User user = userRepository.findById(userId).orElseThrow();
-        List<Friendship> friendships = friendshipRepository.findBySenderAndStatus(user, FriendshipStatus.ACCEPTED);
-        return friendships.stream()
-                .map(Friendship::getReceiver)
-                .map(userMapper::toDto)
-                .collect(Collectors.toList());
     }
 }
