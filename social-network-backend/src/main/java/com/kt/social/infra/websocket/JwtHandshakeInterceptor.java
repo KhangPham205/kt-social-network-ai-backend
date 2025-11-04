@@ -51,12 +51,16 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             UserCredential userCred = credentialRepo.findByUsername(username)
                     .orElseThrow(() -> new RuntimeException("User not found: " + username));
 
-            // 🔥 Lưu đầy đủ thông tin user vào attributes
+            // ✅ Lấy đúng id của user tương ứng
+            Long actualUserId = (userCred.getUser() != null) ? userCred.getUser().getId() : userId;
+
+            // 🔥 Lưu đúng id user entity vào attributes
             attributes.put("user", userCred);
-            attributes.put("userId", userId);
+            attributes.put("userId", actualUserId);
             attributes.put("username", username);
 
-            System.out.printf("✅ WebSocket authenticated userId=%d username=%s%n", userId, username);
+            System.out.printf("✅ WebSocket authenticated userId=%d username=%s%n", actualUserId, username);
+
             return true;
 
         } catch (Exception e) {

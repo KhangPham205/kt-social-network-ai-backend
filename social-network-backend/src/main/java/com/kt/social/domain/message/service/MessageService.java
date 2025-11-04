@@ -12,4 +12,6 @@ public interface MessageService {
     void markAsRead(Long messageId);
     List<Long> getConversationMembers(Long conversationId);
     Page<MessageResponse> getMessagesByConversation(Long conversationId, Pageable pageable);
+
+    MessageResponse sendMessageAs(Long userId, MessageRequest request);
 }

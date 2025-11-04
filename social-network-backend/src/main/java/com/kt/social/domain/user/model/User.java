@@ -23,6 +23,9 @@ public class User extends BaseEntity {
 
     private Boolean isActive = true;
 
+    @Column(nullable = false)
+    private Boolean isOnline = false;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private UserInfo userInfo;
 

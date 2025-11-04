@@ -100,4 +100,24 @@ public class MessageServiceImpl implements com.kt.social.domain.message.service.
 
         return page.map(messageMapper::toDto);
     }
+
+    @Transactional
+    public MessageResponse sendMessageAs(Long userId, MessageRequest req) {
+        User sender = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        Conversation convo = conversationRepository.findById(req.getConversationId())
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        Message msg = Message.builder()
+                .conversation(convo)
+                .sender(sender)
+                .replyId(req.getReplyToId())
+                .content(req.getContent())
+                .mediaUrl(req.getMediaUrl())
+                .createdAt(Instant.now())
+                .build();
+
+        Message saved = messageRepository.save(msg);
+        return messageMapper.toDto(saved);
+    }
 }

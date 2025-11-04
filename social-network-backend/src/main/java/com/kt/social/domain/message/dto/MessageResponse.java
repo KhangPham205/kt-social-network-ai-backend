@@ -1,5 +1,6 @@
 package com.kt.social.domain.message.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import java.time.Instant;
 
@@ -19,6 +20,8 @@ public class MessageResponse {
     private String content;
     private String mediaUrl;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Instant createdAt;
+
     private Boolean isRead;
 }

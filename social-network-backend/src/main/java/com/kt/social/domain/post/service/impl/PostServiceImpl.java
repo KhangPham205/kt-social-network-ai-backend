@@ -159,7 +159,10 @@ public class PostServiceImpl  implements PostService {
                 (filter == null || filter.isBlank()) ? null : filter,
                 pageable,
                 postRepository,
-                post -> toResponseWithAccessCheck(current, post),
+                post -> {
+                    if (!canViewPost(current, post)) return null; // 🚫 Bỏ qua bài không có quyền xem
+                    return toResponseWithAccessCheck(current, post);
+                },
                 baseSpec
         );
 
@@ -169,13 +172,26 @@ public class PostServiceImpl  implements PostService {
     @Override
     @Transactional
     public void deletePost(Long postId) {
+        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+
         Post original = postRepository.findById(postId)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
 
+        // Kiểm tra quyền
+        boolean isAuthor = original.getAuthor().getId().equals(currentUser.getId());
+//        boolean isAdmin = currentUser.getRoles().stream()
+//                .anyMatch(role -> role.getName().equalsIgnoreCase("ROLE_ADMIN"));
+
+        if (!isAuthor) {
+            throw new RuntimeException("You are not authorized to delete this post.");
+        }
+
+        // Hủy liên kết các bài share
         List<Post> shares = postRepository.findBySharedPost(original);
         shares.forEach(shared -> shared.setSharedPost(null));
         postRepository.saveAll(shares);
 
+        // Xóa file media nếu có
         Optional.ofNullable(original.getMediaUrl())
                 .ifPresent(storageService::deleteFile);
 
@@ -193,6 +209,19 @@ public class PostServiceImpl  implements PostService {
             case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, original.getAuthor(), FriendshipStatus.ACCEPTED)
                     || friendshipRepository.existsBySenderAndReceiverAndStatus(original.getAuthor(), viewer, FriendshipStatus.ACCEPTED);
             default -> false;
+        };
+    }
+
+    private boolean canViewPost(User viewer, Post post) {
+        if (post == null) return false;
+        User author = post.getAuthor();
+        if (viewer.getId().equals(author.getId())) return true; // Tác giả luôn xem được
+
+        return switch (post.getAccessModifier()) {
+            case PUBLIC -> true;
+            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, author, FriendshipStatus.ACCEPTED)
+                    || friendshipRepository.existsBySenderAndReceiverAndStatus(author, viewer, FriendshipStatus.ACCEPTED);
+            case PRIVATE -> false;
         };
     }
 

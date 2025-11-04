@@ -7,6 +7,8 @@ import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.model.Friendship;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.friendship.service.FriendshipService;
+import com.kt.social.domain.message.dto.ConversationCreateRequest;
+import com.kt.social.domain.message.service.ConversationService;
 import com.kt.social.domain.user.dto.UserProfileDto;
 import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.User;
@@ -19,12 +21,14 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserProfileDto> implements FriendshipService {
 
+    private final ConversationService conversationService;
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
     private final UserRelaRepository userRelaRepository;
@@ -84,6 +88,14 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
             userRelaRepository.save(UserRela.builder().follower(sender).following(receiver).build());
         if (!userRelaRepository.existsByFollowerAndFollowing(receiver, sender))
             userRelaRepository.save(UserRela.builder().follower(receiver).following(sender).build());
+
+        // Tạo conversation giữa 2 người khi là bạn bè
+        ConversationCreateRequest convoReq = new ConversationCreateRequest();
+        convoReq.setIsGroup(false);
+        convoReq.setTitle(null);
+        convoReq.setMemberIds(List.of(senderId, receiverId));
+
+        conversationService.createConversation(convoReq);
 
         return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }
