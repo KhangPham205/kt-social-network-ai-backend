@@ -14,7 +14,7 @@ public class ConversationController {
 
     private final ConversationService conversationService;
 
-    // ✅ Tạo nhóm chat hoặc chat riêng
+    // Tạo nhóm chat hoặc chat riêng
     @PostMapping
     public ResponseEntity<ConversationResponse> createConversation(@RequestBody ConversationCreateRequest req) {
         return ResponseEntity.ok(conversationService.createConversation(req));
