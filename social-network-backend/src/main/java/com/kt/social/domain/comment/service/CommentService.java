@@ -10,5 +10,6 @@ public interface CommentService {
     CommentResponse createComment(CommentRequest request);
     CommentResponse updateComment(UpdateCommentRequest request);
     PageVO<CommentResponse> getCommentsByPost(Long postId, Pageable pageable);
+    PageVO<CommentResponse> getReplies(Long parentId, Pageable pageable);
     void deleteComment(Long id);
 }

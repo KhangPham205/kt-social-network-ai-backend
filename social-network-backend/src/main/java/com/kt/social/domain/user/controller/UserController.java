@@ -45,7 +45,7 @@ public class UserController {
     }
 
     @PutMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<UserProfileDto> uploadAvatar(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<UserProfileDto> uploadAvatar(@RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(userService.updateAvatar(file));
     }
 
@@ -59,6 +59,12 @@ public class UserController {
     public ResponseEntity<FollowResponse> unfollow(@RequestParam Long targetId) {
         User currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(userService.unfollowUser(currentUser.getId(), targetId));
+    }
+
+    @DeleteMapping("/{followerId}/remove-follower")
+    public ResponseEntity<FollowResponse> removeFollower(@PathVariable Long followerId) {
+        User currentUser = userService.getCurrentUser();
+        return ResponseEntity.ok(userService.removeFollower(currentUser.getId(), followerId));
     }
 
     @GetMapping("/{id}/followers")

@@ -12,5 +12,7 @@ public interface CommentMapper {
     @Mapping(source = "author.id", target = "authorId")
     @Mapping(source = "author.displayName", target = "authorName")
     @Mapping(source = "author.avatarUrl", target = "authorAvatar")
+    @Mapping(source = "post.id", target = "postId")
+    @Mapping(source = "parent.id", target = "parentId")
     CommentResponse toDto(Comment comment);
 }

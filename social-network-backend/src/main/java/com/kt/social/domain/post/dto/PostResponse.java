@@ -15,7 +15,7 @@ public class PostResponse {
     private String mediaUrl;
     private AccessScope accessModifier;
 
-    private int likeCount;
+    private int reactCount;
     private int commentCount;
     private int shareCount;
 

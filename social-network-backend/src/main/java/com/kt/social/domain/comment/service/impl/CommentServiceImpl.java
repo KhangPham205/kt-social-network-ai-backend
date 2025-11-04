@@ -15,6 +15,7 @@ import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.infra.storage.service.StorageService;
+import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,9 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,6 +37,7 @@ public class CommentServiceImpl implements CommentService {
     private final CommentMapper commentMapper;
     private final StorageService storageService;
 
+    // ---------------- CREATE ----------------
     @Override
     @Transactional
     public CommentResponse createComment(CommentRequest request) {
@@ -66,9 +66,11 @@ public class CommentServiceImpl implements CommentService {
                 .build();
 
         Comment saved = commentRepository.save(comment);
+        safeUpdateCommentCount(post.getId(), 1);
         return commentMapper.toDto(saved);
     }
 
+    // ---------------- UPDATE ----------------
     @Override
     @Transactional
     public CommentResponse updateComment(UpdateCommentRequest request) {
@@ -77,27 +79,19 @@ public class CommentServiceImpl implements CommentService {
         Comment comment = commentRepository.findById(request.getCommentId())
                 .orElseThrow(() -> new RuntimeException("Comment not found"));
 
-        // Chỉ tác giả được phép chỉnh sửa
         if (!comment.getAuthor().getId().equals(current.getId())) {
             throw new RuntimeException("You can only edit your own comment");
         }
 
-        // Cập nhật nội dung
-        if (request.getContent() != null) {
-            comment.setContent(request.getContent());
-        }
+        if (request.getContent() != null) comment.setContent(request.getContent());
 
-        // Nếu user yêu cầu xóa ảnh
         if (Boolean.TRUE.equals(request.getRemoveImage()) && comment.getMediaUrl() != null) {
             storageService.deleteFile(comment.getMediaUrl());
             comment.setMediaUrl(null);
         }
 
-        // Nếu có ảnh mới
         if (request.getImageFile() != null && !request.getImageFile().isEmpty()) {
-            if (comment.getMediaUrl() != null) {
-                storageService.deleteFile(comment.getMediaUrl());
-            }
+            if (comment.getMediaUrl() != null) storageService.deleteFile(comment.getMediaUrl());
             String newImageUrl = storageService.saveFile(request.getImageFile(), "comments");
             comment.setMediaUrl(newImageUrl);
         }
@@ -106,46 +100,73 @@ public class CommentServiceImpl implements CommentService {
         return commentMapper.toDto(comment);
     }
 
+    // ---------------- GET COMMENT ROOT (depth 0) ----------------
     @Override
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getCommentsByPost(Long postId, Pageable pageable) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
 
-        // Lấy tất cả comment của bài viết trong 1 query
-        List<Comment> allComments = commentRepository.findByPost(post);
+        Page<Comment> rootComments = commentRepository.findByPostAndParentIsNull(post, pageable);
 
-        // Gom các comment theo parentId
-        Map<Long, List<Comment>> groupedByParent = allComments.stream()
-                .filter(c -> c.getParent() != null)
-                .collect(Collectors.groupingBy(c -> c.getParent().getId()));
-
-        // Lấy các comment gốc (không có parent)
-        List<Comment> rootComments = allComments.stream()
-                .filter(c -> c.getParent() == null)
-                .sorted(Comparator.comparing(Comment::getCreatedAt).reversed()) // sắp xếp mới nhất trước
-                .collect(Collectors.toList());
-
-        // Phân trang thủ công (vì Pageable không còn dùng trực tiếp)
-        int start = (int) pageable.getOffset();
-        int end = Math.min(start + pageable.getPageSize(), rootComments.size());
-        List<Comment> pagedRoots = rootComments.subList(start, end);
-
-        // Build cây comment từ map (đệ quy nhưng không query thêm)
-        List<CommentResponse> content = pagedRoots.stream()
-                .map(c -> buildCommentTreeCached(c, groupedByParent, 0))
+        List<CommentResponse> content = rootComments.stream()
+                .map(comment -> {
+                    CommentResponse dto = commentMapper.toDto(comment);
+                    dto.setDepth(0);
+                    dto.setParentId(null);
+                    dto.setChildrenCount(commentRepository.countByParent(comment)); // số phản hồi cấp 1
+                    return dto;
+                })
                 .toList();
 
         return PageVO.<CommentResponse>builder()
-                .page(pageable.getPageNumber())
-                .size(pageable.getPageSize())
-                .totalElements((long) rootComments.size())
-                .totalPages((int) Math.ceil((double) rootComments.size() / pageable.getPageSize()))
+                .page(rootComments.getNumber())
+                .size(rootComments.getSize())
+                .totalElements(rootComments.getTotalElements())
+                .totalPages(rootComments.getTotalPages())
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
     }
 
+    // ---------------- GET REPLIES ----------------
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<CommentResponse> getReplies(Long parentId, Pageable pageable) {
+        Comment parent = commentRepository.findById(parentId)
+                .orElseThrow(() -> new RuntimeException("Parent comment not found"));
+
+        Page<Comment> replies = commentRepository.findByParent(parent, pageable);
+
+        List<CommentResponse> content = replies.stream()
+                .map(reply -> {
+                    CommentResponse dto = commentMapper.toDto(reply);
+                    dto.setParentId(parent.getId());
+
+                    // depth phụ thuộc vào tầng cha
+                    int depth = parent.getParent() == null ? 1 : 2;
+                    dto.setDepth(depth);
+
+                    // nếu là tầng 1 → có thể còn children
+                    if (depth == 1) {
+                        dto.setChildrenCount(commentRepository.countByParent(reply));
+                    }
+                    // nếu là tầng 2 → không đệ quy, FE hiển thị phẳng
+                    return dto;
+                })
+                .collect(Collectors.toList());
+
+        return PageVO.<CommentResponse>builder()
+                .page(replies.getNumber())
+                .size(replies.getSize())
+                .totalElements(replies.getTotalElements())
+                .totalPages(replies.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    // ---------------- DELETE ----------------
     @Override
     @Transactional
     public void deleteComment(Long id) {
@@ -156,22 +177,19 @@ public class CommentServiceImpl implements CommentService {
             throw new RuntimeException("You can only delete your own comment");
         }
         commentRepository.delete(comment);
+        safeUpdateCommentCount(comment.getPost().getId(), -1);
     }
 
-    // ----------------- Helper method ---------------------
-    /**
-     * Xây dựng cây comment đệ quy từ map cache (chỉ dùng dữ liệu đã query).
-     */
-    private CommentResponse buildCommentTreeCached(Comment comment, Map<Long, List<Comment>> groupedByParent, int depth) {
-        CommentResponse dto = commentMapper.toDto(comment);
-        dto.setDepth(depth);
-        List<Comment> replies = groupedByParent.get(comment.getId());
-        if (replies != null && !replies.isEmpty()) {
-            dto.setChildren(replies.stream()
-                    .map(c -> buildCommentTreeCached(c, groupedByParent, depth + 1))
-                    .toList());
+    // ---------------- SAFE UPDATE COMMENT COUNT WITH RETRY ----------------
+    @Transactional
+    public void safeUpdateCommentCount(Long postId, int delta) {
+        for (int i = 0; i < 3; i++) {
+            try {
+                postRepository.updateCommentCount(postId, delta);
+                return;
+            } catch (OptimisticLockException e) {
+                if (i == 2) throw e; // thử tối đa 3 lần
+            }
         }
-
-        return dto;
     }
 }

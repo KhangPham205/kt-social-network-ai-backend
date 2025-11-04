@@ -10,6 +10,6 @@ import lombok.*;
 public class ReactResponse {
     private Long targetId;
     private TargetType targetType;
-    private long likeCount;
+    private long reactCount;
     private String message;
 }

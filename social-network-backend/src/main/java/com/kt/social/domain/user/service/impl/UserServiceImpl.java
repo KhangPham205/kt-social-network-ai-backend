@@ -129,6 +129,21 @@ public class UserServiceImpl extends BaseFilterService<User, UserProfileDto> imp
     }
 
     @Override
+    @Transactional
+    public FollowResponse removeFollower(Long currentUserId, Long followerId) {
+        User current = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        User follower = userRepository.findById(followerId)
+                .orElseThrow(() -> new RuntimeException("Follower not found"));
+
+        if (!userRelaRepository.existsByFollowerAndFollowing(follower, current))
+            throw new RuntimeException("This user is not following you");
+
+        userRelaRepository.deleteByFollowerAndFollowing(follower, current);
+        return new FollowResponse("Removed follower successfully", false);
+    }
+
+    @Override
     public UserProfileDto getProfileByUsername(String username) {
         UserCredential cred = userCredentialRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Credential not found"));

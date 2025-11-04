@@ -23,7 +23,7 @@ public class Post extends BaseEntity {
 
     private AccessScope accessModifier;
 
-    private int likeCount;
+    private int reactCount;
 
     private int commentCount;
 

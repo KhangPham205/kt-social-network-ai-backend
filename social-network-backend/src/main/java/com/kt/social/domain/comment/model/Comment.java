@@ -42,6 +42,8 @@ public class Comment {
 
     private String mediaUrl;
 
+    private int reactCount;
+
     @CreationTimestamp
     private Instant createdAt;
 

@@ -10,6 +10,8 @@ import com.kt.social.domain.friendship.service.FriendshipService;
 import com.kt.social.domain.user.dto.UserProfileDto;
 import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.User;
+import com.kt.social.domain.user.model.UserRela;
+import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +27,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
 
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
+    private final UserRelaRepository userRelaRepository;
     private final UserMapper userMapper;
 
     // --------------------------- Friend Actions ---------------------------
@@ -72,6 +75,16 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
         Friendship f = getFriendship(senderId, receiverId);
         f.setStatus(FriendshipStatus.FRIEND);
         friendshipRepository.save(f);
+
+        // follow hai chiều khi trở thành bạn bè
+        User sender = getUser(senderId);
+        User receiver = getUser(receiverId);
+
+        if (!userRelaRepository.existsByFollowerAndFollowing(sender, receiver))
+            userRelaRepository.save(UserRela.builder().follower(sender).following(receiver).build());
+        if (!userRelaRepository.existsByFollowerAndFollowing(receiver, sender))
+            userRelaRepository.save(UserRela.builder().follower(receiver).following(sender).build());
+
         return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }
 
@@ -92,6 +105,9 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
         friendshipRepository.findBySenderAndReceiver(u1, u2).ifPresent(friendshipRepository::delete);
         friendshipRepository.findBySenderAndReceiver(u2, u1).ifPresent(friendshipRepository::delete);
 
+        userRelaRepository.deleteByFollowerAndFollowing(u1, u2);
+        userRelaRepository.deleteByFollowerAndFollowing(u2, u1);
+
         return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED, userId, friendId);
     }
 
@@ -104,12 +120,16 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
         User user = getUser(userId);
         User target = getUser(targetId);
 
+        // Xóa quan hệ friend + follow hai chiều
+        friendshipRepository.findBySenderAndReceiver(user, target).ifPresent(friendshipRepository::delete);
+        friendshipRepository.findBySenderAndReceiver(target, user).ifPresent(friendshipRepository::delete);
+        userRelaRepository.deleteByFollowerAndFollowing(user, target);
+        userRelaRepository.deleteByFollowerAndFollowing(target, user);
+
+        // Tạo mới bản ghi BLOCK
         Friendship f = friendshipRepository.findBySenderAndReceiver(user, target)
-                .or(() -> friendshipRepository.findBySenderAndReceiver(target, user))
                 .orElse(Friendship.builder().sender(user).receiver(target).build());
 
-        f.setSender(user);
-        f.setReceiver(target);
         f.setStatus(FriendshipStatus.BLOCKED);
         friendshipRepository.save(f);
 

@@ -16,6 +16,7 @@ public interface UserService {
     UserProfileDto updateProfile(UpdateUserProfileRequest request);
     FollowResponse followUser(Long followerId, Long followingId);
     FollowResponse unfollowUser(Long followerId, Long followingId);
+    FollowResponse removeFollower(Long currentUserId, Long followerId);
     PageVO<UserProfileDto> searchUsers(String filter, Pageable pageable);
     PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable);
     PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable);

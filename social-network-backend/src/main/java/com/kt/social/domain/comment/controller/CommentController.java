@@ -27,6 +27,14 @@ public class CommentController {
         return ResponseEntity.ok(commentService.getCommentsByPost(postId, pageable));
     }
 
+    @GetMapping("/{commentId}/replies")
+    public ResponseEntity<PageVO<CommentResponse>> getReplies(
+            @PathVariable Long commentId,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(commentService.getReplies(commentId, pageable));
+    }
+
     @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CommentResponse> createComment(@ModelAttribute CommentRequest request) {
         return ResponseEntity.ok(commentService.createComment(request));

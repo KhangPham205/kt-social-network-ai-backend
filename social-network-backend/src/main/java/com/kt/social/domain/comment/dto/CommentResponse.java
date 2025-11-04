@@ -10,15 +10,23 @@ import java.util.List;
 @AllArgsConstructor
 public class CommentResponse {
     private Long id;
+
     private Long authorId;
     private String authorName;
     private String authorAvatar;
+
+    private Long postId;
+    private Long parentId; // để biết là reply của ai
+
     private String content;
-    private String imageUrl;
+    private String mediaUrl;
+
+    private Integer reactCount;
+    private Integer childrenCount;
+
     private Instant createdAt;
     private Instant updatedAt;
 
-    private Long parentId; // để biết là reply của ai
     private Integer depth;
-    private List<CommentResponse> children; // phản hồi con
+//    private List<CommentResponse> children; // phản hồi con
 }
