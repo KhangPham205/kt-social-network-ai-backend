@@ -1,5 +1,8 @@
 package com.kt.social.domain.friendship.service.impl;
 
+import com.kt.social.common.exception.AccessDeniedException;
+import com.kt.social.common.exception.BadRequestException;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.service.BaseFilterService;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
@@ -41,7 +44,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     @Transactional
     public FriendshipResponse sendRequest(Long userId, Long targetId) {
         if (userId.equals(targetId))
-            throw new IllegalArgumentException("You cannot send a friend request to yourself");
+            throw new BadRequestException("You cannot send a friend request to yourself");
 
         User sender = getUser(userId);
         User receiver = getUser(targetId);
@@ -52,9 +55,9 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
         if (existing.isPresent()) {
             Friendship f = existing.get();
             switch (f.getStatus()) {
-                case BLOCKED -> throw new RuntimeException("You cannot send a request to a blocked user");
-                case PENDING -> throw new RuntimeException("Friend request already pending");
-                case FRIEND -> throw new RuntimeException("You are already friends");
+                case BLOCKED -> throw new BadRequestException("You cannot send a request to a blocked user");
+                case PENDING -> throw new BadRequestException("Friend request already pending");
+                case FRIEND -> throw new BadRequestException("You are already friends");
                 case REJECTED -> {
                     f.setSender(sender);
                     f.setReceiver(receiver);
@@ -78,6 +81,11 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     @Transactional
     public FriendshipResponse acceptRequest(Long senderId, Long receiverId) {
         Friendship f = getFriendship(senderId, receiverId);
+
+        if (f.getStatus() != FriendshipStatus.PENDING) {
+            throw new BadRequestException("Cannot approve a request that does not have status PENDING");
+        }
+
         f.setStatus(FriendshipStatus.FRIEND);
         friendshipRepository.save(f);
 
@@ -104,8 +112,13 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     @Override
     @Transactional
     public FriendshipResponse rejectRequest(Long senderId, Long receiverId) {
-        friendshipRepository.findBySenderAndReceiver(getUser(senderId), getUser(receiverId))
-                .ifPresent(friendshipRepository::delete);
+        Friendship f = getFriendship(senderId, receiverId);
+
+        if (f.getStatus() != FriendshipStatus.PENDING) {
+            throw new BadRequestException("Cannot reject a request that does not have status PENDING");
+        }
+
+        friendshipRepository.delete(f);
         return new FriendshipResponse("Friend request rejected", FriendshipStatus.REJECTED, senderId, receiverId);
     }
 
@@ -115,8 +128,15 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
         User u1 = getUser(userId);
         User u2 = getUser(friendId);
 
-        friendshipRepository.findBySenderAndReceiver(u1, u2).ifPresent(friendshipRepository::delete);
-        friendshipRepository.findBySenderAndReceiver(u2, u1).ifPresent(friendshipRepository::delete);
+        Optional<Friendship> f1 = friendshipRepository.findBySenderAndReceiver(u1, u2);
+        Optional<Friendship> f2 = friendshipRepository.findBySenderAndReceiver(u2, u1);
+
+        if (f1.isEmpty() && f2.isEmpty()) {
+            throw new ResourceNotFoundException("Bạn không phải là bạn bè với người dùng này");
+        }
+
+        f1.ifPresent(friendshipRepository::delete);
+        f2.ifPresent(friendshipRepository::delete);
 
         userRelaRepository.deleteByFollowerAndFollowing(u1, u2);
         userRelaRepository.deleteByFollowerAndFollowing(u2, u1);
@@ -128,7 +148,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     @Transactional
     public FriendshipResponse blockUser(Long userId, Long targetId) {
         if (userId.equals(targetId))
-            throw new RuntimeException("You cannot block yourself");
+            throw new BadRequestException("You cannot block yourself");
 
         User user = getUser(userId);
         User target = getUser(targetId);
@@ -141,7 +161,11 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
 
         // Tạo mới bản ghi BLOCK
         Friendship f = friendshipRepository.findBySenderAndReceiver(user, target)
-                .orElse(Friendship.builder().sender(user).receiver(target).build());
+                .orElse(Friendship.builder()
+                        .sender(user)
+                        .receiver(target)
+                        .build()
+                );
 
         f.setStatus(FriendshipStatus.BLOCKED);
         friendshipRepository.save(f);
@@ -153,10 +177,10 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     @Transactional
     public FriendshipResponse unblockUser(Long userId, Long targetId) {
         Friendship friendship = friendshipRepository.findBySenderAndReceiver(getUser(userId), getUser(targetId))
-                .orElseThrow(() -> new RuntimeException("No blocked relationship found"));
+                .orElseThrow(() -> new ResourceNotFoundException("No blocked relationship found"));
 
         if (friendship.getStatus() != FriendshipStatus.BLOCKED)
-            throw new RuntimeException("This user is not blocked");
+            throw new BadRequestException("This user is not blocked");
 
         friendshipRepository.delete(friendship);
         return new FriendshipResponse("User unblocked successfully", FriendshipStatus.REJECTED, userId, targetId);
@@ -167,13 +191,13 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     public FriendshipResponse unsendRequest(Long userId, Long targetId) {
         Friendship f = friendshipRepository.findBySenderAndReceiver(getUser(userId), getUser(targetId))
                 .or(() -> friendshipRepository.findBySenderAndReceiver(getUser(targetId), getUser(userId)))
-                .orElseThrow(() -> new RuntimeException("No friend request found"));
+                .orElseThrow(() -> new ResourceNotFoundException("No friend request found"));
 
         if (!f.getSender().getId().equals(userId))
-            throw new RuntimeException("You cannot unsend a request you didn’t send");
+            throw new AccessDeniedException("You cannot unsend a request you didn’t send");
 
         if (f.getStatus() != FriendshipStatus.PENDING)
-            throw new RuntimeException("Cannot unsend a request that is not pending");
+            throw new BadRequestException("Cannot unsend a request that is not pending");
 
         friendshipRepository.delete(f);
         return new FriendshipResponse("Friend request unsent", null, userId, targetId);
@@ -267,12 +291,12 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
 
     private User getUser(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
     private Friendship getFriendship(Long senderId, Long receiverId) {
         return friendshipRepository.findBySenderAndReceiver(getUser(senderId), getUser(receiverId))
-                .orElseThrow(() -> new RuntimeException("Friendship not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Friendship not found"));
     }
 
     private UserRelationDto toRelationDto(User viewer, User target) {

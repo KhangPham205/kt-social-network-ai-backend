@@ -1,11 +1,16 @@
 package com.kt.social.config;
 
+// Các import cần thiết...
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kt.social.auth.security.JwtAuthenticationFilter;
+import com.kt.social.common.exception.ErrorResponse;
 import jakarta.servlet.Filter;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -15,12 +20,16 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.io.OutputStream;
+import java.util.Date;
 import java.util.List;
 
 @Configuration
@@ -31,14 +40,60 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    // 401 (UNAUTHORIZED)
+    @Bean
+    public AuthenticationEntryPoint customAuthenticationEntryPoint() {
+        return (request, response, authException) -> {
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED); // 401
+
+            ErrorResponse errorResponse = new ErrorResponse(
+                    HttpStatus.UNAUTHORIZED.value(),
+                    "Yêu cầu xác thực không hợp lệ hoặc bị thiếu.",
+                    new Date().getTime()
+            );
+
+            // Ghi lỗi vào response body
+            OutputStream out = response.getOutputStream();
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.writeValue(out, errorResponse);
+            out.flush();
+        };
+    }
+
+    // 403 (FORBIDDEN)
+    @Bean
+    public AccessDeniedHandler customAccessDeniedHandler() {
+        return (request, response, accessDeniedException) -> {
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN); // 403
+
+            ErrorResponse errorResponse = new ErrorResponse(
+                    HttpStatus.FORBIDDEN.value(),
+                    "Bạn không có quyền truy cập tài nguyên này.",
+                    new Date().getTime()
+            );
+
+            OutputStream out = response.getOutputStream();
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.writeValue(out, errorResponse);
+            out.flush();
+        };
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors().and()
-                .csrf(AbstractHttpConfigurer::disable) // Tắt CSRF vì bạn dùng JWT
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Không lưu session
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(customAuthenticationEntryPoint())
+                        .accessDeniedHandler(customAccessDeniedHandler())
+                )
+
                 .authorizeHttpRequests(auth -> auth
-                        // ✅ Cho phép swagger và auth API
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
@@ -50,16 +105,13 @@ public class SecurityConfig {
                                 "/files/**",
                                 "/videos/**"
                         ).permitAll()
-                        // ✅ Mọi request khác yêu cầu xác thực JWT
                         .anyRequest().authenticated()
                 )
-                // Thêm filter giải mã JWT trước khi tới UsernamePasswordAuthenticationFilter
                 .addFilterBefore((Filter) jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // Expose AuthenticationManager cho AuthService dùng
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();

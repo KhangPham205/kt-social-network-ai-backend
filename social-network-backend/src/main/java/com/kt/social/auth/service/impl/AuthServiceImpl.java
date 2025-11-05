@@ -7,11 +7,15 @@ import com.kt.social.auth.model.RefreshToken;
 import com.kt.social.auth.model.Role;
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.PasswordResetTokenRepository;
+import com.kt.social.auth.repository.RefreshTokenRepository;
 import com.kt.social.auth.repository.RoleRepository;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.security.JwtProvider;
 import com.kt.social.auth.service.AuthService;
 import com.kt.social.auth.service.RefreshTokenService;
+import com.kt.social.common.exception.BadRequestException;
+import com.kt.social.common.exception.InvalidCredentialsException;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.domain.user.model.UserInfo;
 import com.kt.social.domain.user.repository.UserInfoRepository;
 import com.kt.social.domain.user.repository.UserRepository;
@@ -21,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -38,17 +43,17 @@ public class AuthServiceImpl implements AuthService {
     private final RoleRepository roleRepository;
     private final UserCredentialRepository userCredentialRepository;
     private final JwtProvider jwtProvider;
-    private final AuthenticationManager authenticationManager;
     private final PasswordEncoder passwordEncoder;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RefreshTokenService refreshTokenService;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final UserInfoRepository userInfoRepository;
 
     @Override
     public RegisterResponse register(RegisterRequest registerRequest) {
         if (userCredentialRepository.existsByUsername(registerRequest.getUsername())) {
-            throw new IllegalArgumentException("Username is already in use");
+            throw new BadRequestException("Username is already in use");
         }
 
         Role userRole = roleRepository.findByName("USER")
@@ -81,20 +86,16 @@ public class AuthServiceImpl implements AuthService {
 
         userInfoRepository.save(userInfo);
 
-        UserDetails userDetails = buildUserDetails(userCredential);
-        String accessToken = jwtProvider.generateToken(userDetails, userCredential.getId());
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
-
         return new RegisterResponse("Registered Successfully");
     }
 
     @Override
     public LoginResponse login(LoginRequest loginRequest) {
         UserCredential userCredential = userCredentialRepository.findByUsername(loginRequest.getUsername())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + loginRequest.getUsername()));
+                .orElseThrow(() -> new ResourceNotFoundException("Wrong username or password"));
 
         if (!passwordEncoder.matches(loginRequest.getPassword(), userCredential.getPassword())) {
-            throw new IllegalArgumentException("Wrong password");
+            throw new InvalidCredentialsException("Sai tên đăng nhập hoặc mật khẩu");
         }
 
         if (userCredential.getStatus() != AccountStatus.ACTIVE) {
@@ -119,9 +120,29 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public void logout(String accessToken) {
+        // 1. Trích xuất username (hoặc ID) từ Access Token
+        // (Giả sử jwtProvider.extractUsername trả về username)
+        String username = jwtProvider.extractUsername(accessToken);
+
+        // 2. Tìm UserCredential bằng username
+        UserCredential user = userCredentialRepository.findByUsername(username)
+                .orElse(null);
+
+        if (user != null) {
+            // 3. Xóa Refresh Token dựa trên User ID
+            // (Giả sử RefreshToken có liên kết với UserCredential)
+            refreshTokenRepository.deleteByUser(user);
+        }
+
+        // 4. Xóa context (vẫn nên làm)
+        SecurityContextHolder.clearContext();
+    }
+
+    @Override
     public SendVerifyEmailResponse sendVerificationCode(String email) {
         UserCredential user = userCredentialRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("Email not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Email not found: " + email));
 
         String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
         user.setVerificationCode(code);
@@ -137,7 +158,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public boolean verifyOtp(OtpVerificationRequest request) {
         UserCredential user = userCredentialRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("Email not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Email not found: " + request.getEmail()));
 
         return switch (request.getType()) {
             case VERIFY_EMAIL -> handleEmailVerification(user, request.getCode());
@@ -166,7 +187,7 @@ public class AuthServiceImpl implements AuthService {
 
     private boolean handlePasswordReset(UserCredential user, String code) {
         PasswordResetToken token = passwordResetTokenRepository.findByEmailAndCode(user.getEmail(), code)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired code"));
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid or expired code"));
 
         if (token.getExpiryDate().isBefore(Instant.now())) {
             throw new IllegalStateException("Code expired");

@@ -8,6 +8,7 @@ import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.RefreshTokenRepository;
 import com.kt.social.auth.security.JwtProvider;
 import com.kt.social.auth.service.RefreshTokenService;
+import com.kt.social.common.exception.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -40,11 +41,11 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         String refreshToken = request.getRefreshToken();
 
         RefreshToken token = refreshTokenRepository.findByToken(refreshToken)
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token. Please log in again."));
+                .orElseThrow(() -> new BadRequestException("Invalid refresh token. Please log in again."));
 
         if (token.getExpiryDate().isBefore(java.time.Instant.now())) {
             refreshTokenRepository.delete(token);
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired code");
+            throw new BadRequestException("Invalid or expired code");
         }
 
         var user = token.getUser();

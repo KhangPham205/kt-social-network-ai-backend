@@ -2,6 +2,7 @@ package com.kt.social.domain.message.service.impl;
 
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.domain.message.dto.ConversationCreateRequest;
 import com.kt.social.domain.message.dto.ConversationResponse;
 import com.kt.social.domain.message.model.Conversation;
@@ -59,7 +60,7 @@ public class ConversationServiceImpl implements com.kt.social.domain.message.ser
             for (Long userId : req.getMemberIds()) {
                 if (!userId.equals(creator.getId())) {
                     User member = userRepository.findById(userId)
-                            .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+                            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
                     ConversationMember cm = ConversationMember.builder()
                             .id(new ConversationMemberId(saved.getId(), member.getId()))

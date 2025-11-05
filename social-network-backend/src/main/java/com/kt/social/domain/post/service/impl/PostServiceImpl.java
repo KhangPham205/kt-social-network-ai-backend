@@ -2,6 +2,9 @@ package com.kt.social.domain.post.service.impl;
 
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.exception.AccessDeniedException;
+import com.kt.social.common.exception.BadRequestException;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
@@ -83,14 +86,17 @@ public class PostServiceImpl implements PostService {
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
         Post post = postRepository.findById(request.getPostId())
-                .orElseThrow(() -> new RuntimeException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         if (!post.getAuthor().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("You are not authorized to update this post.");
+            throw new BadRequestException("You are not authorized to update this post.");
         }
 
         post.setContent(request.getContent());
-        post.setAccessModifier(request.getAccessModifier());
+
+        if (request.getAccessModifier() != null) {
+            post.setAccessModifier(request.getAccessModifier());
+        }
 
         // Xóa media cũ nếu được yêu cầu
         if (Boolean.TRUE.equals(request.getRemoveMedia()) && post.getMediaUrl() != null) {
@@ -117,16 +123,16 @@ public class PostServiceImpl implements PostService {
         User viewer = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
         Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new RuntimeException("Post not found with id: " + postId));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found with id: " + postId));
 
         User author = post.getAuthor();
 
-        // 🔒 Kiểm tra quyền truy cập
+        // Kiểm tra quyền truy cập
         switch (post.getAccessModifier()) {
             case PRIVATE -> {
                 // Chỉ tác giả mới xem được
                 if (!viewer.getId().equals(author.getId())) {
-                    throw new RuntimeException("You don't have permission to view this private post");
+                    throw new AccessDeniedException("You don't have permission to view this private post");
                 }
             }
             case FRIENDS -> {
@@ -134,11 +140,11 @@ public class PostServiceImpl implements PostService {
                         || friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, author, FriendshipStatus.FRIEND);
 
                 if (!areFriends && !viewer.getId().equals(author.getId())) {
-                    throw new RuntimeException("Only friends can view this post");
+                    throw new AccessDeniedException("Only friends can view this post");
                 }
             }
             case PUBLIC -> {
-                // ✅ Ai cũng xem được
+                // Ai cũng xem được
             }
         }
 
@@ -164,7 +170,7 @@ public class PostServiceImpl implements PostService {
     public PageVO<PostResponse> getUserPosts(Long userId, Pageable pageable) {
         User viewer = SecurityUtils.getCurrentUser(credRepo, userRepository);
         User targetUser = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Page<Post> page = postRepository.findByAuthor(targetUser, pageable);
 
@@ -185,11 +191,11 @@ public class PostServiceImpl implements PostService {
     public PostResponse sharePost(Long originalPostId, String caption) {
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
         Post original = postRepository.findById(originalPostId)
-                .orElseThrow(() -> new RuntimeException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         // Kiểm tra quyền share
         switch (original.getAccessModifier()) {
-            case PRIVATE -> throw new RuntimeException("This post is private and cannot be shared.");
+            case PRIVATE -> throw new BadRequestException("This post is private and cannot be shared.");
             case FRIENDS -> {
                 boolean areFriends = friendshipRepository.existsByUserAndFriendAndStatusApproved(
                         currentUser, original.getAuthor()
@@ -197,7 +203,7 @@ public class PostServiceImpl implements PostService {
                         original.getAuthor(), currentUser
                 );
                 if (!areFriends) {
-                    throw new RuntimeException("You must be friends with the author to share this post.");
+                    throw new BadRequestException("You must be friends with the author to share this post.");
                 }
             }
             default -> {} // PUBLIC => được phép
@@ -219,16 +225,16 @@ public class PostServiceImpl implements PostService {
     public PageVO<PostResponse> getFeed(Pageable pageable, String filter) {
         User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
-        // 1️⃣ Lấy danh sách bạn bè (hai chiều)
+        // Lấy danh sách bạn bè (hai chiều)
         var friends = friendshipRepository.findAllAcceptedFriends(current);
 
-        // 2️⃣ Lấy danh sách người mình theo dõi
+        // Lấy danh sách người mình theo dõi
         var followings = userRelaRepository.findByFollower(current)
                 .stream()
                 .map(UserRela::getFollowing)
                 .toList();
 
-        // 3️⃣ Gộp tất cả ID hợp lệ (bao gồm chính current)
+        // Gộp tất cả ID hợp lệ (bao gồm chính current)
         var authorIds = Stream.concat(
                         Stream.concat(friends.stream(), followings.stream()),
                         Stream.of(current)
@@ -237,13 +243,13 @@ public class PostServiceImpl implements PostService {
                 .distinct()
                 .toList();
 
-        // 4️⃣ BaseSpec — lọc các bài viết của user hợp lệ
+        // BaseSpec — lọc các bài viết của user hợp lệ
         Specification<Post> baseSpec = (root, query, cb) -> {
             query.distinct(true); // tránh duplicate khi join
             return root.get("author").get("id").in(authorIds);
         };
 
-        // 5️⃣ Gọi BaseFilterService (qua postFilterService)
+        // Gọi BaseFilterService (qua postFilterService)
         PageVO<PostResponse> pageVO = postFilterService.filterEntity(
                 Post.class,
                 (filter == null || filter.isBlank()) ? null : filter,
@@ -265,7 +271,7 @@ public class PostServiceImpl implements PostService {
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
         Post original = postRepository.findById(postId)
-                .orElseThrow(() -> new RuntimeException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         // Kiểm tra quyền
         boolean isAuthor = original.getAuthor().getId().equals(currentUser.getId());
@@ -273,7 +279,7 @@ public class PostServiceImpl implements PostService {
 //                .anyMatch(role -> role.getName().equalsIgnoreCase("ROLE_ADMIN"));
 
         if (!isAuthor) {
-            throw new RuntimeException("You are not authorized to delete this post.");
+            throw new AccessDeniedException("You are not authorized to delete this post.");
         }
 
         // Hủy liên kết các bài share

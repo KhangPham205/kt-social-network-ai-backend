@@ -2,6 +2,8 @@ package com.kt.social.domain.comment.service.impl;
 
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.exception.AccessDeniedException;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.comment.dto.CommentRequest;
 import com.kt.social.domain.comment.dto.CommentResponse;
@@ -43,12 +45,12 @@ public class CommentServiceImpl implements CommentService {
     public CommentResponse createComment(CommentRequest request) {
         User author = SecurityUtils.getCurrentUser(credRepo, userRepository);
         Post post = postRepository.findById(request.getPostId())
-                .orElseThrow(() -> new RuntimeException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         Comment parent = null;
         if (request.getParentId() != null) {
             parent = commentRepository.findById(request.getParentId())
-                    .orElseThrow(() -> new RuntimeException("Parent comment not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
         }
 
         String mediaUrl = null;
@@ -77,10 +79,10 @@ public class CommentServiceImpl implements CommentService {
         User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
         Comment comment = commentRepository.findById(request.getCommentId())
-                .orElseThrow(() -> new RuntimeException("Comment not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
         if (!comment.getAuthor().getId().equals(current.getId())) {
-            throw new RuntimeException("You can only edit your own comment");
+            throw new AccessDeniedException("You can only edit your own comment");
         }
 
         if (request.getContent() != null) comment.setContent(request.getContent());
@@ -105,7 +107,7 @@ public class CommentServiceImpl implements CommentService {
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getCommentsByPost(Long postId, Pageable pageable) {
         Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new RuntimeException("Post not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         Page<Comment> rootComments = commentRepository.findByPostAndParentIsNull(post, pageable);
 
@@ -134,7 +136,7 @@ public class CommentServiceImpl implements CommentService {
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getReplies(Long parentId, Pageable pageable) {
         Comment parent = commentRepository.findById(parentId)
-                .orElseThrow(() -> new RuntimeException("Parent comment not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
 
         Page<Comment> replies = commentRepository.findByParent(parent, pageable);
 
@@ -171,10 +173,10 @@ public class CommentServiceImpl implements CommentService {
     @Transactional
     public void deleteComment(Long id) {
         Comment comment = commentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Comment not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
         User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
         if (!comment.getAuthor().getId().equals(current.getId())) {
-            throw new RuntimeException("You can only delete your own comment");
+            throw new AccessDeniedException("You can only delete your own comment");
         }
         commentRepository.delete(comment);
         safeUpdateCommentCount(comment.getPost().getId(), -1);

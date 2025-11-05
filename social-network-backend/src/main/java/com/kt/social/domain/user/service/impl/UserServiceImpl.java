@@ -3,6 +3,8 @@ package com.kt.social.domain.user.service.impl;
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.exception.BadRequestException;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.service.BaseFilterService;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
@@ -30,22 +32,26 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     private final UserCredentialRepository userCredentialRepository;
     private final UserRepository userRepository;
     private final UserRelaRepository userRelaRepository;
-    private final UserMapper userMapper;
     private final FriendshipRepository friendshipRepository;
+    private final UserMapper userMapper;
     private final StorageService storageService;
 
     @Override
     public User getCurrentUser() {
         String username = SecurityUtils.getCurrentUsername()
-                .orElseThrow(() -> new RuntimeException("User not authenticated"));
+                .orElseThrow(() -> new BadRequestException("User not authenticated or session expired"));
 
-        return userRepository.findByCredentialUsername(username);
+        User user = userRepository.findByCredentialUsername(username);
+        if (user == null) {
+            throw new ResourceNotFoundException("Not found user according to the token: " + username);
+        }
+        return user;
     }
 
     @Override
     public UserProfileDto getProfile(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         return userMapper.toDto(user);
     }
 
@@ -53,10 +59,10 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Transactional
     public UserProfileDto updateProfile(UpdateUserProfileRequest request) {
         var credential = SecurityUtils.getCurrentUserCredential(userCredentialRepository)
-                .orElseThrow(() -> new RuntimeException("User not authenticated"));
+                .orElseThrow(() -> new BadRequestException("User not authenticated"));
 
         User user = userRepository.findById(credential.getUser().getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         // cập nhật thông tin text
         if (request.getDisplayName() != null) user.setDisplayName(request.getDisplayName());
@@ -86,16 +92,16 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Override
     public FollowResponse followUser(Long userId, Long targetId) {
         if (userId.equals(targetId))
-            throw new RuntimeException("You cannot follow yourself");
+            throw new BadRequestException("You cannot follow yourself");
 
         User follower = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         User following = userRepository.findById(targetId)
-                .orElseThrow(() -> new RuntimeException("Target user not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Target user not found"));
 
         boolean exists = userRelaRepository.existsByFollowerAndFollowing(follower, following);
         if (exists) {
-            throw new RuntimeException("Already following");
+            throw new BadRequestException("Already following");
         }
 
         UserRela rela = UserRela.builder()
@@ -111,17 +117,17 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Transactional
     public FollowResponse unfollowUser(Long userId, Long targetId) {
         if (userId.equals(targetId)) {
-            throw new RuntimeException("You cannot unfollow yourself");
+            throw new BadRequestException("You cannot unfollow yourself");
         }
 
         User follower = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         User following = userRepository.findById(targetId)
-                .orElseThrow(() -> new RuntimeException("Target user not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Target user not found"));
 
         boolean exists = userRelaRepository.existsByFollowerAndFollowing(follower, following);
         if (!exists) {
-            throw new RuntimeException("You are not following this user");
+            throw new BadRequestException("You are not following this user");
         }
 
         userRelaRepository.deleteByFollowerAndFollowing(follower, following);
@@ -132,12 +138,12 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Transactional
     public FollowResponse removeFollower(Long currentUserId, Long followerId) {
         User current = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         User follower = userRepository.findById(followerId)
-                .orElseThrow(() -> new RuntimeException("Follower not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Follower not found"));
 
         if (!userRelaRepository.existsByFollowerAndFollowing(follower, current))
-            throw new RuntimeException("This user is not following you");
+            throw new BadRequestException("This user is not following you");
 
         userRelaRepository.deleteByFollowerAndFollowing(follower, current);
         return new FollowResponse("Removed follower successfully", false);
@@ -146,8 +152,12 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Override
     public UserProfileDto getProfileByUsername(String username) {
         UserCredential cred = userCredentialRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("Credential not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Credential not found"));
         User user = userRepository.findByCredential(cred);
+        if (user == null) {
+            throw new ResourceNotFoundException("Not found profile for user: " + username);
+        }
+
         return userMapper.toDto(user);
     }
 
@@ -155,10 +165,10 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Override
     public UserProfileDto updateAvatar(MultipartFile avatarFile) {
         var credential = SecurityUtils.getCurrentUserCredential(userCredentialRepository)
-                .orElseThrow(() -> new RuntimeException("User not authenticated"));
+                .orElseThrow(() -> new BadRequestException("User not authenticated"));
 
         User user = userRepository.findById(credential.getUser().getId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         // Xóa ảnh cũ (nếu có)
         if (user.getAvatarUrl() != null) {
@@ -177,7 +187,7 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     public UserRelationDto getRelationWithUser(Long targetId) {
         User current = getCurrentUser();
         User target = userRepository.findById(targetId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         return mapToRelationDto(current, target);
     }
@@ -200,7 +210,7 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
             if (filter.contains("==") || filter.contains("=like=")) {
                 combinedSpec = combinedSpec.and(io.github.perplexhub.rsql.RSQLJPASupport.toSpecification(filter));
             } else {
-                // 🔍 Nếu chỉ là chuỗi tìm kiếm thông thường
+                // Nếu chỉ là chuỗi tìm kiếm thông thường
                 String likeFilter = "%" + filter.toLowerCase() + "%";
 
                 Specification<User> keywordSpec = (root, query, cb) -> cb.or(
@@ -237,7 +247,7 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     public PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable) {
         User viewer = getCurrentUser();
         User target = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         var followers = userRelaRepository.findByFollowing(target, pageable);
         var content = followers.getContent().stream()
@@ -260,7 +270,7 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     public PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable) {
         User viewer = getCurrentUser();
         User target = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         var following = userRelaRepository.findByFollower(target, pageable);
         var content = following.getContent().stream()

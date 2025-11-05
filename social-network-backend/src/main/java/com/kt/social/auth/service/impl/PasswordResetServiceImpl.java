@@ -6,6 +6,7 @@ import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.PasswordResetTokenRepository;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.service.PasswordResetService;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,7 +29,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     public String sendResetCode(PasswordResetRequest request) {
         Optional<UserCredential> userOpt = userCredentialRepository.findByEmail(request.getEmail());
         if (userOpt.isEmpty()) {
-            throw new RuntimeException("No account found with this email");
+            throw new ResourceNotFoundException("No account found with this email");
         }
 
         // Xóa mã cũ nếu tồn tại

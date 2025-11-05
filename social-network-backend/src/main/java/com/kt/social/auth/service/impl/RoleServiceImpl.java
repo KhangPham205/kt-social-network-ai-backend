@@ -6,6 +6,7 @@ import com.kt.social.auth.repository.PermissionRepository;
 import com.kt.social.auth.repository.RoleRepository;
 import com.kt.social.auth.service.PermissionService;
 import com.kt.social.auth.service.RoleService;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -21,9 +22,9 @@ public class RoleServiceImpl implements RoleService {
     @Override
     public Role assignPermission(Long roleId, Long permissionId) {
         Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new RuntimeException("Role not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
         Permission permission = permissionRepository.findById(permissionId)
-                .orElseThrow(() -> new RuntimeException("Permission not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Permission not found"));
         role.getPermissions().add(permission);
         return roleRepository.save(role);
     }
@@ -31,9 +32,9 @@ public class RoleServiceImpl implements RoleService {
     @Override
     public Role removePermission(Long roleId, Long permissionId) {
         Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new RuntimeException("Role not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
         Permission permission = permissionRepository.findById(permissionId)
-                .orElseThrow(() -> new RuntimeException("Permission not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Permission not found"));
         role.getPermissions().remove(permission);
         return roleRepository.save(role);
     }

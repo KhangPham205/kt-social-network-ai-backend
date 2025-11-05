@@ -1,5 +1,6 @@
 package com.kt.social.infra.storage.service;
 
+import com.kt.social.common.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -22,9 +23,9 @@ public class StorageService {
      * Lưu file vào thư mục con cụ thể (ví dụ "posts/media").
      * Trả về đường dẫn URL công khai dạng http://localhost:8080/files/posts/media/xyz.jpg
      */
-    public String saveFile(MultipartFile file, String subFolder) {
+    public String saveFile(MultipartFile file, String subFolder) throws IOException {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("File is empty or null");
+            throw new BadRequestException("File is empty or null");
         }
 
         String extension = StringUtils.getFilenameExtension(file.getOriginalFilename());
@@ -36,10 +37,11 @@ public class StorageService {
             Path targetFile = targetFolder.resolve(fileName);
             Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
 
-            // ✅ Trả về public URL
             return baseUrl + "/" + subFolder + "/" + fileName;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to save file: " + fileName, e);
+            throw new IOException("Failed to save file: " + fileName, e);
+        } catch (Error e) {
+            throw new BadRequestException(e.getMessage());
         }
     }
 
@@ -54,7 +56,7 @@ public class StorageService {
             Path filePath = Paths.get(uploadDir).resolve(relativePath).normalize();
             Files.deleteIfExists(filePath);
         } catch (IOException e) {
-            System.err.println("⚠️ Failed to delete old file: " + e.getMessage());
+            System.err.println("Failed to delete old file: " + e.getMessage());
         }
     }
 }

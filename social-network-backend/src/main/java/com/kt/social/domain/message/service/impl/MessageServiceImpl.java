@@ -2,6 +2,7 @@ package com.kt.social.domain.message.service.impl;
 
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.domain.message.dto.MessageRequest;
 import com.kt.social.domain.message.dto.MessageResponse;
 import com.kt.social.domain.message.mapper.MessageMapper;
@@ -38,7 +39,7 @@ public class MessageServiceImpl implements com.kt.social.domain.message.service.
     public MessageResponse sendMessage(MessageRequest req) {
         User sender = SecurityUtils.getCurrentUser(credRepo, userRepository);
         Conversation convo = conversationRepository.findById(req.getConversationId())
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
         String mediaUrl = req.getMediaUrl();
         if (req.getMediaFile() != null && !req.getMediaFile().isEmpty()) {
@@ -79,7 +80,7 @@ public class MessageServiceImpl implements com.kt.social.domain.message.service.
     public void markAsRead(Long messageId) {
         User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
         MessageReceipt receipt = receiptRepository.findByMessageIdAndUserId(messageId, current.getId())
-                .orElseThrow(() -> new RuntimeException("Receipt not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Receipt not found"));
         receipt.setIsRead(true);
         receipt.setReadAt(Instant.now());
         receiptRepository.save(receipt);
@@ -94,7 +95,7 @@ public class MessageServiceImpl implements com.kt.social.domain.message.service.
     @Override
     public Page<MessageResponse> getMessagesByConversation(Long conversationId, Pageable pageable) {
         Conversation conv = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
         Page<Message> page = messageRepository.findByConversationOrderByCreatedAtDesc(conv, pageable);
 
@@ -104,9 +105,9 @@ public class MessageServiceImpl implements com.kt.social.domain.message.service.
     @Transactional
     public MessageResponse sendMessageAs(Long userId, MessageRequest req) {
         User sender = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         Conversation convo = conversationRepository.findById(req.getConversationId())
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
         Message msg = Message.builder()
                 .conversation(convo)
