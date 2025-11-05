@@ -333,7 +333,6 @@ public class PostServiceImpl implements PostService {
     protected PostResponse toResponseWithAccessCheck(User viewer, Post post) {
         PostResponse dto = postMapper.toDto(post);
 
-        // kiểm tra bài share có khả dụng không
         if (post.getSharedPost() != null) {
             Optional<Post> visible = getVisibleSharedPost(viewer, post.getSharedPost());
             dto.setSharedPost(visible.map(postMapper::toDto).orElse(null));
@@ -343,6 +342,9 @@ public class PostServiceImpl implements PostService {
 
         Long currentUserId = viewer.getId();
         dto.setReactSummary(reactService.getReactSummary(post.getId(), TargetType.POST, currentUserId));
+
+        int shareCount = postRepository.countSharesByPostId(post.getId());
+        dto.setShareCount(shareCount);
 
         return dto;
     }

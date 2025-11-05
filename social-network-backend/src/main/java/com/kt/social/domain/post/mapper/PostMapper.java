@@ -12,6 +12,7 @@ public interface PostMapper {
     @Mapping(source = "author.avatarUrl", target = "authorAvatar")
     @Mapping(source = "sharedPost", target = "sharedPost", qualifiedByName = "sharedPostToDto")
     @Mapping(target = "reactSummary", ignore = true)
+    @Mapping(target = "shareCount", ignore = true) // shareCount sẽ set bên service
     PostResponse toDto(Post post);
 
     /**
@@ -25,5 +26,6 @@ public interface PostMapper {
     @Mapping(source = "author.avatarUrl", target = "authorAvatar")
     @Mapping(target = "sharedPost", ignore = true) // Ngăn vòng lặp vô hạn
     @Mapping(target = "reactSummary", ignore = true)
+    @Mapping(target = "shareCount", ignore = true) // shareCount sẽ set ở service
     PostResponse mapSharedPost(Post sharedPost);
 }

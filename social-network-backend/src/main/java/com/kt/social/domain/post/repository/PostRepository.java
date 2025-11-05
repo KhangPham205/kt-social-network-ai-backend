@@ -22,6 +22,9 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     Page<Post> findAll(Specification<Post> spec, @NonNull Pageable pageable);
 
+    @Query("SELECT COUNT(p) FROM Post p WHERE p.sharedPost.id = :postId")
+    int countSharesByPostId(@Param("postId") Long postId);
+
     @Modifying
     @Query("UPDATE Post p SET p.commentCount = p.commentCount + :delta WHERE p.id = :postId")
     void updateCommentCount(@Param("postId") Long postId, @Param("delta") int delta);
