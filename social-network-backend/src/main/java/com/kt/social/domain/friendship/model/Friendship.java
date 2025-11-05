@@ -5,6 +5,7 @@ import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -12,7 +13,7 @@ import lombok.*;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class Friendship extends BaseEntity {
 
     @ManyToOne

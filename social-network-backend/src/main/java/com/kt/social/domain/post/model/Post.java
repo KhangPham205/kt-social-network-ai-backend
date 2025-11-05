@@ -7,6 +7,7 @@ import com.kt.social.domain.user.model.User;
 import com.kt.social.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +18,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class Post extends BaseEntity {
 
     @Column(nullable = false, columnDefinition = "text")
@@ -42,6 +43,7 @@ public class Post extends BaseEntity {
     /**
      * Nếu sharedPostVisible = false thì UI hiển thị "Bài gốc không còn khả dụng"
      */
+    @Builder.Default
     private Boolean sharedPostVisible = true;
 
     @ManyToOne(fetch = FetchType.LAZY)

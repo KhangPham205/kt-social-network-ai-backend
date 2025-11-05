@@ -33,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.FileSystemNotFoundException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -74,6 +75,7 @@ public class PostServiceImpl implements PostService {
                 .mediaUrl(mediaUrl)
                 .accessModifier(request.getAccessModifier())
                 .sharedPost(sharedPost)
+                .createdAt(Instant.now())
                 .build();
 
         postRepository.save(post);
@@ -112,6 +114,8 @@ public class PostServiceImpl implements PostService {
             String mediaUrl = storageService.saveFile(request.getMedia(), "posts");
             post.setMediaUrl(mediaUrl);
         }
+
+        post.setUpdatedAt(Instant.now());
 
         postRepository.save(post);
         return postMapper.toDto(post);

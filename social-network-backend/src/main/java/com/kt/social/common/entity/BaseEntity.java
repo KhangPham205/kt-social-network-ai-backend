@@ -1,10 +1,9 @@
 package com.kt.social.common.entity;
 
 import jakarta.persistence.*;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.Accessors;
+import lombok.experimental.SuperBuilder;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.lang.Nullable;
 
@@ -16,6 +15,9 @@ import java.time.Instant;
 @Accessors(chain = true)
 @MappedSuperclass
 @EqualsAndHashCode
+@NoArgsConstructor
+@AllArgsConstructor
+@SuperBuilder
 public class BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

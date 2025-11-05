@@ -3,6 +3,7 @@ package com.kt.social.domain.user.model;
 import com.kt.social.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -10,7 +11,7 @@ import lombok.*;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class UserRela extends BaseEntity {
 
     @ManyToOne

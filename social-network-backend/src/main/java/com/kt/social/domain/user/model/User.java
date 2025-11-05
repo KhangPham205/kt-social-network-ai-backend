@@ -4,6 +4,7 @@ import com.kt.social.auth.model.UserCredential;
 import jakarta.persistence.*;
 import lombok.*;
 import com.kt.social.common.entity.BaseEntity;
+import lombok.experimental.SuperBuilder;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -11,7 +12,7 @@ import com.kt.social.common.entity.BaseEntity;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class User extends BaseEntity {
 
     @Column(nullable = false)
