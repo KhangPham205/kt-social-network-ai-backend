@@ -25,14 +25,12 @@ import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.service.StorageService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.crossstore.ChangeSetPersister;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.file.FileSystemNotFoundException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -342,6 +340,10 @@ public class PostServiceImpl implements PostService {
         } else {
             dto.setSharedPost(null);
         }
+
+        Long currentUserId = viewer.getId();
+        dto.setReactSummary(reactService.getReactSummary(post.getId(), TargetType.POST, currentUserId));
+
         return dto;
     }
 
