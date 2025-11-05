@@ -23,7 +23,7 @@ public class StorageService {
      * Lưu file vào thư mục con cụ thể (ví dụ "posts/media").
      * Trả về đường dẫn URL công khai dạng http://localhost:8080/files/posts/media/xyz.jpg
      */
-    public String saveFile(MultipartFile file, String subFolder) throws IOException {
+    public String saveFile(MultipartFile file, String subFolder) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("File is empty or null");
         }
@@ -38,9 +38,7 @@ public class StorageService {
             Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
 
             return baseUrl + "/" + subFolder + "/" + fileName;
-        } catch (IOException e) {
-            throw new IOException("Failed to save file: " + fileName, e);
-        } catch (Error e) {
+        } catch (Error | IOException e) {
             throw new BadRequestException(e.getMessage());
         }
     }
