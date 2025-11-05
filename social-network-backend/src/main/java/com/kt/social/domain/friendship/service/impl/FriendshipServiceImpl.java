@@ -10,6 +10,7 @@ import com.kt.social.domain.friendship.service.FriendshipService;
 import com.kt.social.domain.message.dto.ConversationCreateRequest;
 import com.kt.social.domain.message.service.ConversationService;
 import com.kt.social.domain.user.dto.UserProfileDto;
+import com.kt.social.domain.user.dto.UserRelationDto;
 import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.model.UserRela;
@@ -26,7 +27,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserProfileDto> implements FriendshipService {
+public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRelationDto> implements FriendshipService {
 
     private final ConversationService conversationService;
     private final FriendshipRepository friendshipRepository;
@@ -80,10 +81,10 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
         f.setStatus(FriendshipStatus.FRIEND);
         friendshipRepository.save(f);
 
-        // follow hai chiều khi trở thành bạn bè
         User sender = getUser(senderId);
         User receiver = getUser(receiverId);
 
+        // follow hai chiều khi trở thành bạn bè
         if (!userRelaRepository.existsByFollowerAndFollowing(sender, receiver))
             userRelaRepository.save(UserRela.builder().follower(sender).following(receiver).build());
         if (!userRelaRepository.existsByFollowerAndFollowing(receiver, sender))
@@ -182,7 +183,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
 
     @Override
     @Transactional(readOnly = true)
-    public PageVO<UserProfileDto> getFriends(Long userId, String filter, Pageable pageable) {
+    public PageVO<UserRelationDto> getFriends(Long userId, String filter, Pageable pageable) {
         User user = getUser(userId);
 
         Specification<Friendship> base = (root, q, cb) -> cb.and(
@@ -199,11 +200,10 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
                 pageable,
                 friendshipRepository,
                 friendship -> {
-                    // Nếu user là sender -> friend là receiver, ngược lại
                     User friend = friendship.getSender().equals(user)
                             ? friendship.getReceiver()
                             : friendship.getSender();
-                    return userMapper.toDto(friend);
+                    return toRelationDto(user, friend);
                 },
                 base
         );
@@ -211,38 +211,56 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
 
     @Override
     @Transactional(readOnly = true)
-    public PageVO<UserProfileDto> getPendingRequests(Long userId, String filter, Pageable pageable) {
+    public PageVO<UserRelationDto> getPendingRequests(Long userId, String filter, Pageable pageable) {
         User user = getUser(userId);
         Specification<Friendship> base = (root, q, cb) ->
                 cb.and(cb.equal(root.get("receiver"), user),
                         cb.equal(root.get("status"), FriendshipStatus.PENDING));
 
-        return filterEntity(Friendship.class, filter, pageable,
-                friendshipRepository, f -> userMapper.toDto(f.getSender()), base);
+        return filterEntity(
+                Friendship.class,
+                filter,
+                pageable,
+                friendshipRepository,
+                f -> toRelationDto(user, f.getSender()),
+                base
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageVO<UserProfileDto> getSentRequests(Long userId, String filter, Pageable pageable) {
+    public PageVO<UserRelationDto> getSentRequests(Long userId, String filter, Pageable pageable) {
         User user = getUser(userId);
         Specification<Friendship> base = (root, q, cb) ->
                 cb.and(cb.equal(root.get("sender"), user),
                         cb.equal(root.get("status"), FriendshipStatus.PENDING));
 
-        return filterEntity(Friendship.class, filter, pageable,
-                friendshipRepository, f -> userMapper.toDto(f.getReceiver()), base);
+        return filterEntity(
+                Friendship.class,
+                filter,
+                pageable,
+                friendshipRepository,
+                f -> toRelationDto(user, f.getReceiver()),
+                base
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageVO<UserProfileDto> getBlockedUsers(Long userId, String filter, Pageable pageable) {
+    public PageVO<UserRelationDto> getBlockedUsers(Long userId, String filter, Pageable pageable) {
         User user = getUser(userId);
         Specification<Friendship> base = (root, q, cb) ->
                 cb.and(cb.equal(root.get("sender"), user),
                         cb.equal(root.get("status"), FriendshipStatus.BLOCKED));
 
-        return filterEntity(Friendship.class, filter, pageable,
-                friendshipRepository, f -> userMapper.toDto(f.getReceiver()), base);
+        return filterEntity(
+                Friendship.class,
+                filter,
+                pageable,
+                friendshipRepository,
+                f -> toRelationDto(user, f.getReceiver()),
+                base
+        );
     }
 
     // --------------------------- Helpers ---------------------------
@@ -255,5 +273,34 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserPro
     private Friendship getFriendship(Long senderId, Long receiverId) {
         return friendshipRepository.findBySenderAndReceiver(getUser(senderId), getUser(receiverId))
                 .orElseThrow(() -> new RuntimeException("Friendship not found"));
+    }
+
+    private UserRelationDto toRelationDto(User viewer, User target) {
+        boolean isFollowing = userRelaRepository.existsByFollowerAndFollowing(viewer, target);
+        boolean isFollowedBy = userRelaRepository.existsByFollowerAndFollowing(target, viewer);
+
+        var friendship = friendshipRepository.findBySenderAndReceiver(viewer, target)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(target, viewer))
+                .map(f -> FriendshipResponse.builder()
+                        .status(f.getStatus())
+                        .senderId(viewer.getId())
+                        .receiverId(target.getId())
+                        .build())
+                .orElse(FriendshipResponse.builder().build());
+
+        UserProfileDto base = userMapper.toDto(target);
+
+        return UserRelationDto.builder()
+                .id(base.getId())
+                .displayName(base.getDisplayName())
+                .avatarUrl(base.getAvatarUrl())
+                .isActive(base.getIsActive())
+                .bio(base.getBio())
+                .favorites(base.getFavorites())
+                .dateOfBirth(base.getDateOfBirth())
+                .isFollowing(isFollowing)
+                .isFollowedBy(isFollowedBy)
+                .friendship(friendship)
+                .build();
     }
 }

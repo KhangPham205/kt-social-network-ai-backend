@@ -4,6 +4,7 @@ import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.model.Friendship;
 import com.kt.social.domain.user.dto.UserProfileDto;
+import com.kt.social.domain.user.dto.UserRelationDto;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -20,8 +21,8 @@ public interface FriendshipService {
 
     FriendshipResponse unsendRequest(Long userId, Long targetId);
 
-    PageVO<UserProfileDto> getFriends(Long userId, String filter, Pageable pageable);
-    PageVO<UserProfileDto> getPendingRequests(Long userId, String filter, Pageable pageable);
-    PageVO<UserProfileDto> getSentRequests(Long userId, String filter, Pageable pageable);
-    PageVO<UserProfileDto> getBlockedUsers(Long userId, String filter, Pageable pageable);
+    PageVO<UserRelationDto> getFriends(Long userId, String filter, Pageable pageable);
+    PageVO<UserRelationDto> getPendingRequests(Long userId, String filter, Pageable pageable);
+    PageVO<UserRelationDto> getSentRequests(Long userId, String filter, Pageable pageable);
+    PageVO<UserRelationDto> getBlockedUsers(Long userId, String filter, Pageable pageable);
 }
