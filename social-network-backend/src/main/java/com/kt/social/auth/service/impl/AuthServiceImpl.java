@@ -121,21 +121,8 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void logout(String accessToken) {
-        // 1. Trích xuất username (hoặc ID) từ Access Token
-        // (Giả sử jwtProvider.extractUsername trả về username)
         String username = jwtProvider.extractUsername(accessToken);
-
-        // 2. Tìm UserCredential bằng username
-        UserCredential user = userCredentialRepository.findByUsername(username)
-                .orElse(null);
-
-        if (user != null) {
-            // 3. Xóa Refresh Token dựa trên User ID
-            // (Giả sử RefreshToken có liên kết với UserCredential)
-            refreshTokenRepository.deleteByUser(user);
-        }
-
-        // 4. Xóa context (vẫn nên làm)
+        userCredentialRepository.findByUsername(username).ifPresent(refreshTokenRepository::deleteByUser);
         SecurityContextHolder.clearContext();
     }
 

@@ -1,8 +1,9 @@
 package com.kt.social.domain.post.dto;
 
 import com.kt.social.domain.post.enums.AccessScope;
-import lombok.Data;
 import org.springframework.web.multipart.MultipartFile;
+
+import lombok.Data;
 
 @Data
 public class PostRequest {

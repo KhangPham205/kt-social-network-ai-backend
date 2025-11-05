@@ -14,6 +14,8 @@ import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.comment.service.CommentService;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
+import com.kt.social.domain.react.enums.TargetType;
+import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.infra.storage.service.StorageService;
@@ -37,6 +39,7 @@ public class CommentServiceImpl implements CommentService {
     private final UserRepository userRepository;
     private final UserCredentialRepository credRepo;
     private final CommentMapper commentMapper;
+    private final ReactService reactService;
     private final StorageService storageService;
 
     // ---------------- CREATE ----------------
@@ -106,6 +109,8 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getCommentsByPost(Long postId, Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
@@ -116,7 +121,11 @@ public class CommentServiceImpl implements CommentService {
                     CommentResponse dto = commentMapper.toDto(comment);
                     dto.setDepth(0);
                     dto.setParentId(null);
-                    dto.setChildrenCount(commentRepository.countByParent(comment)); // số phản hồi cấp 1
+                    dto.setChildrenCount(commentRepository.countByParent(comment));
+
+                    dto.setReactSummary(
+                            reactService.getReactSummary(comment.getId(), TargetType.COMMENT, currentUser.getId())
+                    );
                     return dto;
                 })
                 .toList();
@@ -138,6 +147,7 @@ public class CommentServiceImpl implements CommentService {
         Comment parent = commentRepository.findById(parentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
 
+        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
         Page<Comment> replies = commentRepository.findByParent(parent, pageable);
 
         List<CommentResponse> content = replies.stream()
@@ -153,6 +163,9 @@ public class CommentServiceImpl implements CommentService {
                     if (depth == 1) {
                         dto.setChildrenCount(commentRepository.countByParent(reply));
                     }
+                    dto.setReactSummary(
+                            reactService.getReactSummary(reply.getId(), TargetType.COMMENT, currentUser.getId())
+                    );
                     // nếu là tầng 2 → không đệ quy, FE hiển thị phẳng
                     return dto;
                 })

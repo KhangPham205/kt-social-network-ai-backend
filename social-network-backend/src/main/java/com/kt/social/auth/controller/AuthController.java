@@ -24,7 +24,6 @@ public class AuthController {
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
     private final PasswordResetService passwordResetService;
-    private final RefreshTokenRepository refreshTokenRepository;
 
     @PostMapping("/register")
     public ResponseEntity<RegisterResponse> register(@RequestBody RegisterRequest request) {
@@ -43,9 +42,7 @@ public class AuthController {
         }
 
         String token = authHeader.substring(7);
-        refreshTokenRepository.findByToken(token).ifPresent(refreshTokenRepository::delete);
-
-        SecurityContextHolder.clearContext();
+        authService.logout(token);
         return ResponseEntity.ok("Logged out successfully");
     }
 
