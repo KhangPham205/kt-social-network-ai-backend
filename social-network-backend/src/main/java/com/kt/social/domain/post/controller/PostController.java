@@ -54,7 +54,7 @@ public class PostController {
         return ResponseEntity.ok(postService.getMyPosts(pageable));
     }
 
-    @GetMapping("/{userId}")
+    @GetMapping("/user/{userId}")
     public ResponseEntity<PageVO<PostResponse>> getUserPosts(
             @PathVariable Long userId,
             @ParameterObject Pageable pageable

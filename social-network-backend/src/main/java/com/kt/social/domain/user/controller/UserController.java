@@ -22,7 +22,7 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/search")
-    public ResponseEntity<PageVO<UserProfileDto>> searchUsers(
+    public ResponseEntity<PageVO<UserRelationDto>> searchUsers(
             @RequestParam(required = false) String filter,
             @ParameterObject Pageable pageable
     ) {

@@ -25,7 +25,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class UserServiceImpl extends BaseFilterService<User, UserProfileDto> implements UserService {
+public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> implements UserService {
 
     private final UserCredentialRepository userCredentialRepository;
     private final UserRepository userRepository;
@@ -183,18 +183,51 @@ public class UserServiceImpl extends BaseFilterService<User, UserProfileDto> imp
     }
 
     // ---------------------- Search + Filter ----------------------
-
     @Override
     @Transactional(readOnly = true)
-    public PageVO<UserProfileDto> searchUsers(String filter, Pageable pageable) {
-        // baseSpec: loại bỏ người dùng bị khóa hoặc chính mình
+    public PageVO<UserRelationDto> searchUsers(String filter, Pageable pageable) {
         var currentUser = getCurrentUser();
-        Specification<User> base = (root, q, cb) -> cb.and(
+
+        Specification<User> baseSpec = (root, query, cb) -> cb.and(
                 cb.notEqual(root.get("id"), currentUser.getId()),
                 cb.isTrue(root.get("isActive"))
         );
 
-        return filterEntity(User.class, filter, pageable, userRepository, userMapper::toDto, base);
+        Specification<User> combinedSpec = baseSpec;
+
+        if (filter != null && !filter.isBlank()) {
+            // 🧩 Nếu filter là RSQL (chứa ==, =like=, ...)
+            if (filter.contains("==") || filter.contains("=like=")) {
+                combinedSpec = combinedSpec.and(io.github.perplexhub.rsql.RSQLJPASupport.toSpecification(filter));
+            } else {
+                // 🔍 Nếu chỉ là chuỗi tìm kiếm thông thường
+                String likeFilter = "%" + filter.toLowerCase() + "%";
+
+                Specification<User> keywordSpec = (root, query, cb) -> cb.or(
+                        cb.like(cb.lower(root.get("displayName")), likeFilter),
+                        cb.like(cb.lower(root.join("credential").get("username")), likeFilter),
+                        cb.like(cb.lower(root.join("userInfo").get("bio")), likeFilter),
+                        cb.like(cb.lower(root.join("userInfo").get("favorites")), likeFilter)
+                );
+
+                combinedSpec = combinedSpec.and(keywordSpec);
+            }
+        }
+
+        Page<User> page = userRepository.findAll(combinedSpec, pageable);
+
+        var content = page.getContent().stream()
+                .map(u -> mapToRelationDto(currentUser, u))
+                .toList();
+
+        return PageVO.<UserRelationDto>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
     }
 
     // ---------------------- Follow/Unfollow ----------------------
