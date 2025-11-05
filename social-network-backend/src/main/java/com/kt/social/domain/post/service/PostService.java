@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface PostService {
     PostResponse create(PostRequest request);
+    PostResponse getPostById(Long postId);
     PageVO<PostResponse> getMyPosts(Pageable pageable);
     PageVO<PostResponse> getUserPosts(Long userId, Pageable pageable);
     PostResponse sharePost(Long originalPostId, String caption);
@@ -15,4 +16,5 @@ public interface PostService {
 
     @Transactional
     void deletePost(Long postId);
+
 }

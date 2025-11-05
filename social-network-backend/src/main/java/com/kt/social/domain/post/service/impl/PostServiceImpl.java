@@ -19,12 +19,14 @@ import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.infra.storage.service.StorageService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.crossstore.ChangeSetPersister;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.FileSystemNotFoundException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -66,6 +68,49 @@ public class PostServiceImpl  implements PostService {
                 .build();
 
         postRepository.save(post);
+        return postMapper.toDto(post);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PostResponse getPostById(Long postId) {
+        User viewer = SecurityUtils.getCurrentUser(credRepo, userRepository);
+
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new RuntimeException("Post not found with id: " + postId));
+
+        User author = post.getAuthor();
+
+        // 🔒 Kiểm tra quyền truy cập
+        switch (post.getAccessModifier()) {
+            case PRIVATE -> {
+                // Chỉ tác giả mới xem được
+                if (!viewer.getId().equals(author.getId())) {
+                    throw new RuntimeException("You don't have permission to view this private post");
+                }
+            }
+            case FRIENDS -> {
+                boolean areFriends = friendshipRepository.existsBySenderAndReceiverAndStatus(author, viewer, FriendshipStatus.FRIEND)
+                        || friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, author, FriendshipStatus.FRIEND);
+
+                if (!areFriends && !viewer.getId().equals(author.getId())) {
+                    throw new RuntimeException("Only friends can view this post");
+                }
+            }
+            case PUBLIC -> {
+                // ✅ Ai cũng xem được
+            }
+        }
+
+        // Nếu bài này là bài chia sẻ thì kiểm tra luôn quyền xem bài gốc
+        if (post.getSharedPost() != null) {
+            boolean canViewShared = canViewSharedPost(viewer, post.getSharedPost());
+            if (!canViewShared) {
+                // Ẩn bài gốc (UI sẽ hiển thị "Bài gốc không khả dụng")
+                post.setSharedPost(null);
+            }
+        }
+
         return postMapper.toDto(post);
     }
 

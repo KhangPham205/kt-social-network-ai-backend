@@ -29,6 +29,11 @@ public class PostController {
         return ResponseEntity.ok(postService.getFeed(pageable, filter));
     }
 
+    @GetMapping("/{postId}")
+    public ResponseEntity<PostResponse> getPostById(@PathVariable Long postId) {
+        return ResponseEntity.ok(postService.getPostById(postId));
+    }
+
     @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PostResponse> create(@ModelAttribute PostRequest request) {
         return ResponseEntity.ok(postService.create(request));
