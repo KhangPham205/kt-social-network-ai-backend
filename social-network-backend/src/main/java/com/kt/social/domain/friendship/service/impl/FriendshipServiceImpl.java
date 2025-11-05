@@ -283,8 +283,8 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 .or(() -> friendshipRepository.findBySenderAndReceiver(target, viewer))
                 .map(f -> FriendshipResponse.builder()
                         .status(f.getStatus())
-                        .senderId(viewer.getId())
-                        .receiverId(target.getId())
+                        .senderId(f.getSender().getId())
+                        .receiverId(f.getReceiver().getId())
                         .build())
                 .orElse(FriendshipResponse.builder().build());
 
