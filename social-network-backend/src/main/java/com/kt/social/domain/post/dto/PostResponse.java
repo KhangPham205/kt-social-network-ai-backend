@@ -1,6 +1,7 @@
 package com.kt.social.domain.post.dto;
 
 import com.kt.social.domain.post.enums.AccessScope;
+import com.kt.social.domain.react.dto.ReactSummaryDto;
 import lombok.*;
 
 import java.time.Instant;
@@ -25,6 +26,8 @@ public class PostResponse {
 
     // Nếu bài gốc không khả dụng => null
     private PostResponse sharedPost;
+
+    private ReactSummaryDto reactSummary;
 
     private Instant createdAt;
     private Instant updatedAt;

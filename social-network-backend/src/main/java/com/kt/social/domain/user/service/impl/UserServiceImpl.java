@@ -165,8 +165,8 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
             storageService.deleteFile(user.getAvatarUrl());
         }
 
-        // Lưu ảnh mới
-        String avatarUrl = storageService.saveAvatar(avatarFile);
+        // Lưu ảnh mới vào folder avatars
+        String avatarUrl = storageService.saveFile(avatarFile, "avatars");
         user.setAvatarUrl(avatarUrl);
         userRepository.save(user);
 

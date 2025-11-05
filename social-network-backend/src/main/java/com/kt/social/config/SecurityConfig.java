@@ -47,7 +47,8 @@ public class SecurityConfig {
                                 "/api/v1/auth/**",
                                 "/ws/**",
                                 "/ws",
-                                "/files/**"
+                                "/files/**",
+                                "/videos/**"
                         ).permitAll()
                         // ✅ Mọi request khác yêu cầu xác thực JWT
                         .anyRequest().authenticated()

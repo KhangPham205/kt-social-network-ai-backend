@@ -1,11 +1,7 @@
 package com.kt.social.domain.react.controller;
 
-import com.kt.social.auth.util.SecurityUtils;
-import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.react.dto.ReactRequest;
-import com.kt.social.domain.react.dto.ReactResponse;
-import com.kt.social.domain.react.dto.ReactUserDto;
+import com.kt.social.domain.react.dto.*;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.service.UserService;
@@ -36,5 +32,14 @@ public class ReactController {
             @ParameterObject Pageable pageable
     ) {
         return ResponseEntity.ok(reactService.getReactUsers(targetId, targetType, pageable));
+    }
+
+    @GetMapping("/{targetType}/{targetId}/summary")
+    public ResponseEntity<ReactSummaryDto> getReactSummary(
+            @PathVariable TargetType targetType,
+            @PathVariable Long targetId
+    ) {
+        Long userId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(reactService.getReactSummary(targetId, targetType, userId));
     }
 }

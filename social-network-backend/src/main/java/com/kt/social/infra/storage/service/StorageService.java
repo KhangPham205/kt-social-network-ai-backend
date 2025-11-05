@@ -2,6 +2,7 @@ package com.kt.social.infra.storage.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -12,48 +13,38 @@ import java.util.UUID;
 public class StorageService {
 
     @Value("${file.upload-dir}")
-    private String uploadDir;
-
-    @Value("${file.avatar-dir}")
-    private String avatarDir;
+    private String uploadDir;  // Ví dụ: C:/uploads/
 
     @Value("${file.base-url}")
-    private String baseUrl;
+    private String baseUrl;    // Ví dụ: http://localhost:8080/files/
 
     /**
-     * Lưu file chung trong thư mục con (ví dụ "avatars", "posts", "comments")
+     * Lưu file vào thư mục con cụ thể (ví dụ "posts/media").
+     * Trả về đường dẫn URL công khai dạng http://localhost:8080/files/posts/media/xyz.jpg
      */
-    public String saveFile(MultipartFile file, String subDir) {
+    public String saveFile(MultipartFile file, String subFolder) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is empty or null");
         }
 
+        String extension = StringUtils.getFilenameExtension(file.getOriginalFilename());
+        String fileName = UUID.randomUUID() + "." + extension;
+        Path targetFolder = Paths.get(uploadDir, subFolder).toAbsolutePath().normalize();
+
         try {
-            Path dirPath = Paths.get(uploadDir, subDir).normalize();
-            Files.createDirectories(dirPath);
+            Files.createDirectories(targetFolder);
+            Path targetFile = targetFolder.resolve(fileName);
+            Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
 
-            String originalFilename = sanitizeFilename(file.getOriginalFilename());
-            String filename = UUID.randomUUID() + "_" + originalFilename;
-            Path filePath = dirPath.resolve(filename);
-
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-            return baseUrl + "/" + subDir + "/" + filename;
-
+            // ✅ Trả về public URL
+            return baseUrl + "/" + subFolder + "/" + fileName;
         } catch (IOException e) {
-            throw new RuntimeException("❌ Failed to store file: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to save file: " + fileName, e);
         }
     }
 
     /**
-     * Lưu riêng avatar người dùng
-     */
-    public String saveAvatar(MultipartFile avatarFile) {
-        return saveFile(avatarFile, avatarDir);
-    }
-
-    /**
-     * Xóa file theo URL public
+     * Xóa file dựa trên URL public
      */
     public void deleteFile(String fileUrl) {
         if (fileUrl == null || fileUrl.isBlank()) return;
@@ -65,13 +56,5 @@ public class StorageService {
         } catch (IOException e) {
             System.err.println("⚠️ Failed to delete old file: " + e.getMessage());
         }
-    }
-
-    /**
-     * Làm sạch tên file tránh lỗi path traversal
-     */
-    private String sanitizeFilename(String filename) {
-        if (filename == null) return "unnamed";
-        return filename.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 }

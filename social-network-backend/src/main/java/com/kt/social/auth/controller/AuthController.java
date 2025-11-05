@@ -1,14 +1,20 @@
 package com.kt.social.auth.controller;
 
 import com.kt.social.auth.dto.*;
+import com.kt.social.auth.model.RefreshToken;
+import com.kt.social.auth.repository.RefreshTokenRepository;
 import com.kt.social.auth.service.AuthService;
 import com.kt.social.auth.service.PasswordResetService;
 import com.kt.social.auth.service.RefreshTokenService;
+import io.swagger.v3.oas.models.OpenAPI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -18,6 +24,7 @@ public class AuthController {
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
     private final PasswordResetService passwordResetService;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     @PostMapping("/register")
     public ResponseEntity<RegisterResponse> register(@RequestBody RegisterRequest request) {
@@ -27,6 +34,19 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.badRequest().body("Invalid token header");
+        }
+
+        String token = authHeader.substring(7);
+        refreshTokenRepository.findByToken(token).ifPresent(refreshTokenRepository::delete);
+
+        SecurityContextHolder.clearContext();
+        return ResponseEntity.ok("Logged out successfully");
     }
 
     @PostMapping("/refresh")

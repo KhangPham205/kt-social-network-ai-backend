@@ -39,6 +39,11 @@ public class PostController {
         return ResponseEntity.ok(postService.create(request));
     }
 
+    @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<PostResponse> update(@ModelAttribute PostRequest request) {
+        return ResponseEntity.ok(postService.update(request));
+    }
+
     @PostMapping(value = "/share", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PostResponse> sharePost(
             @RequestParam Long originalPostId,

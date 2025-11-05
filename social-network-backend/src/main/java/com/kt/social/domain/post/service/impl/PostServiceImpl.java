@@ -13,10 +13,13 @@ import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.post.service.PostFilterService;
 import com.kt.social.domain.post.service.PostService;
+import com.kt.social.domain.react.enums.TargetType;
+import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.model.UserRela;
 import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
+import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.crossstore.ChangeSetPersister;
@@ -34,7 +37,7 @@ import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
-public class PostServiceImpl  implements PostService {
+public class PostServiceImpl implements PostService {
 
     private final UserRelaRepository userRelaRepository;
     private final UserCredentialRepository credRepo;
@@ -43,6 +46,8 @@ public class PostServiceImpl  implements PostService {
     private final UserRepository userRepository;
     private final StorageService storageService;
     private final PostFilterService postFilterService;
+    private final UserService userService;
+    private final ReactService reactService;
     private final PostMapper postMapper;
 
     @Override
@@ -50,10 +55,11 @@ public class PostServiceImpl  implements PostService {
     public PostResponse create(PostRequest request) {
         User author = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
-        String mediaUrl = Optional.ofNullable(request.getMedia())
-                .filter(file -> !file.isEmpty())
-                .map(file -> storageService.saveFile(file, "posts"))
-                .orElse(null);
+        String mediaUrl = null;
+
+        if (request.getMedia() != null && !request.getMedia().isEmpty()) {
+            mediaUrl = storageService.saveFile(request.getMedia(), "posts");
+        }
 
         Post sharedPost = Optional.ofNullable(request.getSharedPostId())
                 .flatMap(postRepository::findById)
@@ -66,6 +72,40 @@ public class PostServiceImpl  implements PostService {
                 .accessModifier(request.getAccessModifier())
                 .sharedPost(sharedPost)
                 .build();
+
+        postRepository.save(post);
+        return postMapper.toDto(post);
+    }
+
+    @Override
+    @Transactional
+    public PostResponse update(PostRequest request) {
+        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+
+        Post post = postRepository.findById(request.getPostId())
+                .orElseThrow(() -> new RuntimeException("Post not found"));
+
+        if (!post.getAuthor().getId().equals(currentUser.getId())) {
+            throw new RuntimeException("You are not authorized to update this post.");
+        }
+
+        post.setContent(request.getContent());
+        post.setAccessModifier(request.getAccessModifier());
+
+        // Xóa media cũ nếu được yêu cầu
+        if (Boolean.TRUE.equals(request.getRemoveMedia()) && post.getMediaUrl() != null) {
+            storageService.deleteFile(post.getMediaUrl());
+            post.setMediaUrl(null);
+        }
+
+        // Upload media mới nếu có
+        if (request.getMedia() != null && !request.getMedia().isEmpty()) {
+            if (post.getMediaUrl() != null && request.getRemoveMedia()) {
+                storageService.deleteFile(post.getMediaUrl());
+            }
+            String mediaUrl = storageService.saveFile(request.getMedia(), "posts");
+            post.setMediaUrl(mediaUrl);
+        }
 
         postRepository.save(post);
         return postMapper.toDto(post);
@@ -111,7 +151,12 @@ public class PostServiceImpl  implements PostService {
             }
         }
 
-        return postMapper.toDto(post);
+        PostResponse dto = postMapper.toDto(post);
+
+        Long currentUserId = userService.getCurrentUser().getId();
+        dto.setReactSummary(reactService.getReactSummary(postId, TargetType.POST, currentUserId));
+
+        return dto;
     }
 
     @Override

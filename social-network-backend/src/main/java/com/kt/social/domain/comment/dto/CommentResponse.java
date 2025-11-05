@@ -1,5 +1,6 @@
 package com.kt.social.domain.comment.dto;
 
+import com.kt.social.domain.react.dto.ReactSummaryDto;
 import lombok.*;
 import java.time.Instant;
 import java.util.List;
@@ -14,6 +15,8 @@ public class CommentResponse {
     private Long authorId;
     private String authorName;
     private String authorAvatar;
+
+    private ReactSummaryDto reactSummary;
 
     private Long postId;
     private Long parentId; // để biết là reply của ai

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface PostService {
     PostResponse create(PostRequest request);
+    PostResponse update(PostRequest request);
     PostResponse getPostById(Long postId);
     PageVO<PostResponse> getMyPosts(Pageable pageable);
     PageVO<PostResponse> getUserPosts(Long userId, Pageable pageable);

@@ -5,14 +5,10 @@ import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
-import com.kt.social.domain.react.dto.ReactRequest;
-import com.kt.social.domain.react.dto.ReactResponse;
-import com.kt.social.domain.react.dto.ReactUserDto;
+import com.kt.social.domain.react.dto.*;
 import com.kt.social.domain.react.enums.TargetType;
-import com.kt.social.domain.react.model.React;
-import com.kt.social.domain.react.model.ReactType;
-import com.kt.social.domain.react.repository.ReactRepository;
-import com.kt.social.domain.react.repository.ReactTypeRepository;
+import com.kt.social.domain.react.model.*;
+import com.kt.social.domain.react.repository.*;
 import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
@@ -22,6 +18,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,64 +34,49 @@ public class ReactServiceImpl implements ReactService {
     @Override
     @Transactional
     public ReactResponse toggleReact(Long userId, ReactRequest req) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
+        User user = userRepository.getReferenceById(userId);
         TargetType tType = req.getTargetType();
         Long targetId = req.getTargetId();
 
-        // Kiểm tra target có tồn tại
-        if (tType == TargetType.POST) {
-            postRepository.findById(targetId)
-                    .orElseThrow(() -> new RuntimeException("Post not found"));
-        } else if (tType == TargetType.COMMENT) {
-            commentRepository.findById(targetId)
-                    .orElseThrow(() -> new RuntimeException("Comment not found"));
-        }
+        // Kiểm tra nhanh sự tồn tại target (tránh N+1 query)
+        boolean exists = switch (tType) {
+            case POST -> postRepository.existsById(targetId);
+            case COMMENT -> commentRepository.existsById(targetId);
+            default -> true;
+        };
+        if (!exists) throw new RuntimeException("Target not found");
 
-        // Kiểm tra react hiện tại của user
-        var existingOpt = reactRepository.findByUserAndTargetIdAndTargetType(user, targetId, tType);
+        // Kiểm tra react hiện tại
+        var existing = reactRepository.findByUserAndTargetIdAndTargetType(user, targetId, tType).orElse(null);
 
-        if (existingOpt.isPresent()) {
-            React existing = existingOpt.get();
-
-            // Nếu react cùng loại → HỦY
-            if (existing.getReactType().getId().equals(req.getReactTypeId())) {
+        if (existing != null) {
+            // Cùng loại → Hủy
+            if (Objects.equals(existing.getReactType().getId(), req.getReactTypeId())) {
                 reactRepository.delete(existing);
-            }
-            // Nếu khác loại → cập nhật
-            else {
-                ReactType newType = reactTypeRepository.findById(req.getReactTypeId())
-                        .orElseThrow(() -> new RuntimeException("ReactType not found"));
+            } else {
+                // Khác loại → đổi loại
+                ReactType newType = reactTypeRepository.getReferenceById(req.getReactTypeId());
                 existing.setReactType(newType);
+                existing.setCreatedAt(Instant.now());
                 reactRepository.save(existing);
             }
         } else {
-            // Nếu chưa react → thêm mới
-            ReactType rt = reactTypeRepository.findById(req.getReactTypeId())
-                    .orElseThrow(() -> new RuntimeException("ReactType not found"));
-            React newReact = React.builder()
-                    .user(user)
-                    .targetId(targetId)
-                    .targetType(tType)
-                    .reactType(rt)
-                    .createdAt(Instant.now())
-                    .build();
-            reactRepository.save(newReact);
+            // Chưa có → thêm mới
+            ReactType rt = reactTypeRepository.getReferenceById(req.getReactTypeId());
+            reactRepository.save(
+                    React.builder()
+                            .user(user)
+                            .targetId(targetId)
+                            .targetType(tType)
+                            .reactType(rt)
+                            .createdAt(Instant.now())
+                            .build()
+            );
         }
 
-        // Cập nhật reactCount cho đúng đối tượng
+        // Cập nhật đếm (sử dụng countBy để không cần fetch all)
         long count = reactRepository.countByTargetIdAndTargetType(targetId, tType);
-
-        if (tType == TargetType.POST) {
-            Post post = postRepository.findById(targetId).orElseThrow();
-            post.setReactCount((int) count);
-            postRepository.save(post);
-        } else if (tType == TargetType.COMMENT) {
-            Comment comment = commentRepository.findById(targetId).orElseThrow();
-            comment.setReactCount((int) count);
-            commentRepository.save(comment);
-        }
+        updateTargetReactCount(tType, targetId, count);
 
         return ReactResponse.builder()
                 .targetId(targetId)
@@ -101,6 +84,19 @@ public class ReactServiceImpl implements ReactService {
                 .reactCount(count)
                 .message("React updated")
                 .build();
+    }
+
+    private void updateTargetReactCount(TargetType tType, Long targetId, long count) {
+        switch (tType) {
+            case POST -> postRepository.findById(targetId).ifPresent(p -> {
+                p.setReactCount((int) count);
+                postRepository.save(p);
+            });
+            case COMMENT -> commentRepository.findById(targetId).ifPresent(c -> {
+                c.setReactCount((int) count);
+                commentRepository.save(c);
+            });
+        }
     }
 
     @Override
@@ -130,6 +126,34 @@ public class ReactServiceImpl implements ReactService {
                 .totalPages(page.getTotalPages())
                 .numberOfElements(content.size())
                 .content(content)
+                .build();
+    }
+
+    @Override
+    public ReactSummaryDto getReactSummary(Long targetId, TargetType targetType, Long userId) {
+        // chỉ trả về name + count, không join User hay ReactType đầy đủ
+        List<Object[]> summary = reactRepository.summarizeByTarget(targetId, targetType);
+
+        Map<String, Long> counts = summary.stream()
+                .collect(Collectors.toMap(
+                        arr -> (String) arr[0],      // reactType.name
+                        arr -> (Long) arr[1]         // COUNT(*)
+                ));
+
+        // Lấy react của user hiện tại (có thể cache sau)
+        String currentUserReact = reactRepository
+                .findByUserAndTargetIdAndTargetType(
+                        userRepository.getReferenceById(userId),
+                        targetId,
+                        targetType
+                )
+                .map(r -> r.getReactType().getName())
+                .orElse(null);
+
+        return ReactSummaryDto.builder()
+                .counts(counts)
+                .total(counts.values().stream().mapToLong(Long::longValue).sum())
+                .currentUserReact(currentUserReact)
                 .build();
     }
 }

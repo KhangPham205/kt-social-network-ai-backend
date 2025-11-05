@@ -1,4 +1,4 @@
-package com.kt.social.infra.storage.config;
+package com.kt.social.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -19,12 +19,12 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
-        String resourceLocation = "file:" + uploadPath + "/";
-
-        // Ví dụ: http://localhost:8080/files/posts/abc.jpg
-        registry.addResourceHandler("/files/**")
-                .addResourceLocations(resourceLocation)
-                .setCachePeriod(3600);
+//        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+//        String resourceLocation = "file:" + uploadPath + "/";
+//
+//        // Ví dụ: http://localhost:8080/files/posts/abc.jpg
+//        registry.addResourceHandler("/files/**")
+//                .addResourceLocations(resourceLocation)
+//                .setCachePeriod(3600);
     }
 }
