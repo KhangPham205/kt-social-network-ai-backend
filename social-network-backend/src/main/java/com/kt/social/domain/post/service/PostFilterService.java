@@ -3,6 +3,7 @@ package com.kt.social.domain.post.service;
 import com.kt.social.common.service.BaseFilterService;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.post.dto.PostResponse;
+import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.post.mapper.PostMapper;
@@ -30,8 +31,10 @@ public class PostFilterService extends BaseFilterService<Post, PostResponse> {
             Pageable pageable,
             List<Long> authorIds
     ) {
-        Specification<Post> baseSpec = (root, query, cb) ->
-                root.get("author").get("id").in(authorIds);
+        Specification<Post> baseSpec = (root, query, cb) -> cb.and(
+                root.get("author").get("id").in(authorIds),
+                cb.notEqual(root.get("accessModifier"), AccessScope.PRIVATE)
+        );
 
         return filterEntity(
                 Post.class,
