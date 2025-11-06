@@ -2,6 +2,7 @@ package com.kt.social.auth.service.impl;
 
 import com.kt.social.auth.dto.*;
 import com.kt.social.auth.enums.AccountStatus;
+import com.kt.social.auth.enums.OtpType;
 import com.kt.social.auth.model.PasswordResetToken;
 import com.kt.social.auth.model.RefreshToken;
 import com.kt.social.auth.model.Role;
@@ -128,7 +129,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void sendVerificationCode(String email) {
+    public void sendVerificationCode(String email){
         UserCredential user = userCredentialRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Email not found: " + email));
 
@@ -138,7 +139,7 @@ public class AuthServiceImpl implements AuthService {
         user.setStatus(AccountStatus.PENDING);
         userCredentialRepository.save(user);
 
-        sendVerificationEmail(user);
+        emailService.sendEmail(user, OtpType.VERIFY_EMAIL, code);
     }
 
     @Override
@@ -151,30 +152,7 @@ public class AuthServiceImpl implements AuthService {
         user.setVerificationCodeExpiry(Instant.now().plusSeconds(300));
         userCredentialRepository.save(user);
 
-        sendVerificationEmail(user);
-    }
-
-    private void sendVerificationEmail(UserCredential user) { //TODO: Update with company logo
-        String subject = "Account Verification";
-        String verificationCode = "VERIFICATION CODE " + user.getVerificationCode();
-        String htmlMessage = "<html>"
-                + "<body style=\"font-family: Arial, sans-serif;\">"
-                + "<div style=\"background-color: #f5f5f5; padding: 20px;\">"
-                + "<h2 style=\"color: #333;\">Welcome to our app!</h2>"
-                + "<p style=\"font-size: 16px;\">Please enter the verification code below to continue:</p>"
-                + "<div style=\"background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1);\">"
-                + "<h3 style=\"color: #333;\">Verification Code:</h3>"
-                + "<p style=\"font-size: 18px; font-weight: bold; color: #007bff;\">" + verificationCode + "</p>"
-                + "</div>"
-                + "</div>"
-                + "</body>"
-                + "</html>";
-
-        try {
-            emailService.sendVerificationEmail(user.getEmail(), subject, htmlMessage);
-        } catch (MessagingException e) {
-            throw new BadRequestException("Failed to send verification email: " + e.getMessage());
-        }
+        emailService.sendEmail(user, OtpType.VERIFY_EMAIL, code);
     }
 
     @Override

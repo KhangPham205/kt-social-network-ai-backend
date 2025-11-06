@@ -1,6 +1,7 @@
 package com.kt.social.auth.service;
 
 import com.kt.social.auth.dto.*;
+import jakarta.mail.MessagingException;
 
 public interface AuthService {
     RegisterResponse register(RegisterRequest request);

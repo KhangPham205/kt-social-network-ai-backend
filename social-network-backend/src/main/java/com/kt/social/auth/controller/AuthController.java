@@ -73,11 +73,12 @@ public class AuthController {
 
     @PostMapping("/reset-password")
     public ResponseEntity<Map<String, String>> resetPassword(@RequestBody PasswordResetRequest request) {
-        String code = passwordResetService.sendResetCode(request);
-        return ResponseEntity.ok(Map.of(
-                "message", "Verification code sent to email (simulated)",
-                "code", code
-        ));
+        try {
+            passwordResetService.sendResetCode(request);
+            return ResponseEntity.ok(Map.of("message", "Password reset code sent (simulated)"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/verify-otp")
