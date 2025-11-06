@@ -258,7 +258,7 @@ public class PostServiceImpl implements PostService {
                 pageable,
                 postRepository,
                 post -> {
-                    if (!canViewPost(current, post)) return null; // 🚫 Bỏ qua bài không có quyền xem
+                    if (!canViewPost(current, post)) return null;
                     return toResponseWithAccessCheck(current, post);
                 },
                 baseSpec
@@ -304,8 +304,8 @@ public class PostServiceImpl implements PostService {
 
         return switch (original.getAccessModifier()) {
             case PUBLIC -> true;
-            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, original.getAuthor(), FriendshipStatus.ACCEPTED)
-                    || friendshipRepository.existsBySenderAndReceiverAndStatus(original.getAuthor(), viewer, FriendshipStatus.ACCEPTED);
+            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, original.getAuthor(), FriendshipStatus.FRIEND)
+                    || friendshipRepository.existsBySenderAndReceiverAndStatus(original.getAuthor(), viewer, FriendshipStatus.FRIEND);
             default -> false;
         };
     }
@@ -317,8 +317,8 @@ public class PostServiceImpl implements PostService {
 
         return switch (post.getAccessModifier()) {
             case PUBLIC -> true;
-            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, author, FriendshipStatus.ACCEPTED)
-                    || friendshipRepository.existsBySenderAndReceiverAndStatus(author, viewer, FriendshipStatus.ACCEPTED);
+            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, author, FriendshipStatus.FRIEND)
+                    || friendshipRepository.existsBySenderAndReceiverAndStatus(author, viewer, FriendshipStatus.FRIEND);
             case PRIVATE -> false;
         };
     }
