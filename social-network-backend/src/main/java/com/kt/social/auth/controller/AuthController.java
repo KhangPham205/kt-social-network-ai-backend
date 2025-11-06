@@ -53,7 +53,22 @@ public class AuthController {
 
     @PostMapping("/sendVerifyEmail")
     public ResponseEntity<?> sendVerifyEmail(@RequestBody SendVerifyEmailRequest request) {
-        return ResponseEntity.ok(authService.sendVerificationCode(request.getEmail()));
+        try {
+            authService.sendVerificationCode(request.getEmail());
+            return ResponseEntity.ok(Map.of("message", "Verification code sent successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/resendVerifyEmail")
+    public ResponseEntity<?> resendVerifyEmail(@RequestBody SendVerifyEmailRequest request) {
+        try {
+            authService.resendVerificationCode(request.getEmail());
+            return ResponseEntity.ok(Map.of("message", "Verification code resent successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PostMapping("/reset-password")

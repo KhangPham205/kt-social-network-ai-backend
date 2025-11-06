@@ -5,6 +5,7 @@ import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -14,7 +15,7 @@ import java.util.Set;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserCredential {
+public class  UserCredential {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -41,6 +42,8 @@ public class UserCredential {
     private AccountStatus status = AccountStatus.PENDING;
 
     private String verificationCode; // mã xác thực email
+
+    private Instant verificationCodeExpiry; // thời gian hết hạn mã xác thực
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

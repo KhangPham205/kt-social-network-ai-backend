@@ -14,7 +14,6 @@ import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.post.mapper.PostMapper;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
-import com.kt.social.domain.post.service.PostFilterService;
 import com.kt.social.domain.post.service.PostService;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.service.ReactService;
@@ -49,7 +48,6 @@ public class PostServiceImpl implements PostService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final StorageService storageService;
-    private final PostFilterService postFilterService;
     private final UserService userService;
     private final ReactService reactService;
     private final PostMapper postMapper;
@@ -276,7 +274,7 @@ public class PostServiceImpl implements PostService {
         }
 
         Page<Post> page = postRepository.findAll(finalSpec, pageable);
-        
+
         return getPostResponsePageVO(current, page);
     }
 

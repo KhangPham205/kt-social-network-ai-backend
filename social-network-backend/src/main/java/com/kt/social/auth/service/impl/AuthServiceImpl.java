@@ -12,6 +12,7 @@ import com.kt.social.auth.repository.RoleRepository;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.security.JwtProvider;
 import com.kt.social.auth.service.AuthService;
+import com.kt.social.auth.service.EmailService;
 import com.kt.social.auth.service.RefreshTokenService;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.InvalidCredentialsException;
@@ -19,16 +20,14 @@ import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.domain.user.model.UserInfo;
 import com.kt.social.domain.user.repository.UserInfoRepository;
 import com.kt.social.domain.user.repository.UserRepository;
+import jakarta.mail.MessagingException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -40,15 +39,17 @@ import java.time.Instant;
 @Slf4j
 public class AuthServiceImpl implements AuthService {
 
-    private final RoleRepository roleRepository;
-    private final UserCredentialRepository userCredentialRepository;
     private final JwtProvider jwtProvider;
     private final PasswordEncoder passwordEncoder;
+    private final RoleRepository roleRepository;
+    private final UserCredentialRepository userCredentialRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RefreshTokenService refreshTokenService;
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final UserInfoRepository userInfoRepository;
+    private final EmailService emailService;
+    private final AuthenticationManager authenticationManager;
 
     @Override
     public RegisterResponse register(RegisterRequest registerRequest) {
@@ -127,18 +128,53 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public SendVerifyEmailResponse sendVerificationCode(String email) {
+    public void sendVerificationCode(String email) {
         UserCredential user = userCredentialRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Email not found: " + email));
 
         String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
         user.setVerificationCode(code);
+        user.setVerificationCodeExpiry(Instant.now().plusSeconds(90));
         user.setStatus(AccountStatus.PENDING);
         userCredentialRepository.save(user);
 
-        log.info("Verification code for {}: {}", email, code);
+        sendVerificationEmail(user);
+    }
 
-        return new SendVerifyEmailResponse("Verification code generated successfully", code);
+    @Override
+    public void resendVerificationCode(String email) {
+        UserCredential user = userCredentialRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Email not found: " + email));
+
+        String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
+        user.setVerificationCode(code);
+        user.setVerificationCodeExpiry(Instant.now().plusSeconds(90));
+        userCredentialRepository.save(user);
+
+        sendVerificationEmail(user);
+    }
+
+    private void sendVerificationEmail(UserCredential user) { //TODO: Update with company logo
+        String subject = "Account Verification";
+        String verificationCode = "VERIFICATION CODE " + user.getVerificationCode();
+        String htmlMessage = "<html>"
+                + "<body style=\"font-family: Arial, sans-serif;\">"
+                + "<div style=\"background-color: #f5f5f5; padding: 20px;\">"
+                + "<h2 style=\"color: #333;\">Welcome to our app!</h2>"
+                + "<p style=\"font-size: 16px;\">Please enter the verification code below to continue:</p>"
+                + "<div style=\"background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1);\">"
+                + "<h3 style=\"color: #333;\">Verification Code:</h3>"
+                + "<p style=\"font-size: 18px; font-weight: bold; color: #007bff;\">" + verificationCode + "</p>"
+                + "</div>"
+                + "</div>"
+                + "</body>"
+                + "</html>";
+
+        try {
+            emailService.sendVerificationEmail(user.getEmail(), subject, htmlMessage);
+        } catch (MessagingException e) {
+            throw new BadRequestException("Failed to send verification email: " + e.getMessage());
+        }
     }
 
     @Override
@@ -166,6 +202,7 @@ public class AuthServiceImpl implements AuthService {
         if (code.equals(user.getVerificationCode())) {
             user.setStatus(AccountStatus.ACTIVE);
             user.setVerificationCode(null);
+            user.setVerificationCodeExpiry(null);
             userCredentialRepository.save(user);
             return true;
         }
