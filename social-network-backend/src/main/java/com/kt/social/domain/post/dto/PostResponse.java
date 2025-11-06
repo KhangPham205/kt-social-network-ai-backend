@@ -25,6 +25,7 @@ public class PostResponse {
     private Long authorId;
 
     // Nếu bài gốc không khả dụng => null
+    private Long sharedPostId;
     private PostResponse sharedPost;
 
     private ReactSummaryDto reactSummary;

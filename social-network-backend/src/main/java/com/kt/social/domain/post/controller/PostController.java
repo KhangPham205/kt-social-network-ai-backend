@@ -44,7 +44,7 @@ public class PostController {
         return ResponseEntity.ok(postService.update(request));
     }
 
-    @PostMapping(value = "/share", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/share")
     public ResponseEntity<PostResponse> sharePost(
             @RequestParam Long originalPostId,
             @RequestParam(required = false) String caption
