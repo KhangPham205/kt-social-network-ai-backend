@@ -134,7 +134,7 @@ public class AuthServiceImpl implements AuthService {
 
         String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
         user.setVerificationCode(code);
-        user.setVerificationCodeExpiry(Instant.now().plusSeconds(90));
+        user.setVerificationCodeExpiry(Instant.now().plusSeconds(300));
         user.setStatus(AccountStatus.PENDING);
         userCredentialRepository.save(user);
 
@@ -148,7 +148,7 @@ public class AuthServiceImpl implements AuthService {
 
         String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
         user.setVerificationCode(code);
-        user.setVerificationCodeExpiry(Instant.now().plusSeconds(90));
+        user.setVerificationCodeExpiry(Instant.now().plusSeconds(300));
         userCredentialRepository.save(user);
 
         sendVerificationEmail(user);
@@ -199,7 +199,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private boolean handleEmailVerification(UserCredential user, String code) {
-        if (code.equals(user.getVerificationCode())) {
+        if (code.equals(user.getVerificationCode()) && user.getVerificationCodeExpiry().isAfter(Instant.now())) {
             user.setStatus(AccountStatus.ACTIVE);
             user.setVerificationCode(null);
             user.setVerificationCodeExpiry(null);
