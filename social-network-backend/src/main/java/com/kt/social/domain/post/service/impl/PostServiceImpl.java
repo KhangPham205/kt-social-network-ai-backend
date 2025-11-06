@@ -24,6 +24,8 @@ import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.service.StorageService;
+import io.github.perplexhub.rsql.RSQLJPASupport;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -227,44 +229,55 @@ public class PostServiceImpl implements PostService {
     public PageVO<PostResponse> getFeed(Pageable pageable, String filter) {
         User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
-        // Lấy danh sách bạn bè (hai chiều)
         var friends = friendshipRepository.findAllAcceptedFriends(current);
-
-        // Lấy danh sách người mình theo dõi
-        var followings = userRelaRepository.findByFollower(current)
-                .stream()
-                .map(UserRela::getFollowing)
-                .toList();
-
-        // Gộp tất cả ID hợp lệ (bao gồm chính current)
-        var authorIds = Stream.concat(
-                        Stream.concat(friends.stream(), followings.stream()),
-                        Stream.of(current)
+        var friendAndSelfIds = Stream.concat(
+                        friends.stream(),
+                        Stream.of(current) // Thêm chính mình vào
                 )
                 .map(User::getId)
                 .distinct()
                 .toList();
 
-        // BaseSpec — lọc các bài viết của user hợp lệ
+        var followings = userRelaRepository.findByFollower(current)
+                .stream()
+                .map(UserRela::getFollowing)
+                .toList();
+
+        var authorIds = Stream.concat(
+                        friendAndSelfIds.stream(),
+                        followings.stream().map(User::getId)
+                )
+                .distinct()
+                .toList();
+
         Specification<Post> baseSpec = (root, query, cb) -> {
-            query.distinct(true); // tránh duplicate khi join
-            return root.get("author").get("id").in(authorIds);
+            query.distinct(true);
+
+            Predicate authorPredicate = root.get("author").get("id").in(authorIds);
+            Predicate publicPosts = cb.equal(root.get("accessModifier"), AccessScope.PUBLIC);
+
+            Predicate friendPosts = cb.and(
+                    cb.equal(root.get("accessModifier"), AccessScope.FRIENDS),
+                    root.get("author").get("id").in(friendAndSelfIds)
+            );
+
+            Predicate privatePosts = cb.and(
+                    cb.equal(root.get("accessModifier"), AccessScope.PRIVATE),
+                    cb.equal(root.get("author"), current)
+            );
+
+            Predicate accessPredicate = cb.or(publicPosts, friendPosts, privatePosts);
+            return cb.and(authorPredicate, accessPredicate);
         };
 
-        // Gọi BaseFilterService (qua postFilterService)
-        PageVO<PostResponse> pageVO = postFilterService.filterEntity(
-                Post.class,
-                (filter == null || filter.isBlank()) ? null : filter,
-                pageable,
-                postRepository,
-                post -> {
-                    if (!canViewPost(current, post)) return null;
-                    return toResponseWithAccessCheck(current, post);
-                },
-                baseSpec
-        );
+        Specification<Post> finalSpec = baseSpec;
+        if (filter != null && !filter.isBlank()) {
+            finalSpec = finalSpec.and(RSQLJPASupport.toSpecification(filter));
+        }
 
-        return pageVO;
+        Page<Post> page = postRepository.findAll(finalSpec, pageable);
+        
+        return getPostResponsePageVO(current, page);
     }
 
     @Override
