@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
 import java.util.List;
 
 @RestController
@@ -35,16 +36,35 @@ public class PostController {
     }
 
     @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<PostResponse> create(@ModelAttribute PostRequest request) {
-        return ResponseEntity.ok(postService.create(request));
+    public ResponseEntity<PostResponse> create(
+            @RequestPart("content") String content,
+            @RequestPart(value = "accessModifier", required = false) String accessModifier,
+            @RequestPart(value = "sharedPostId", required = false) Long sharedPostId,
+            @RequestPart(value = "media", required = false) MultipartFile[] mediaFiles
+    ) {
+        System.out.println("Number of files: " + (mediaFiles != null ? mediaFiles.length : 0));
+        for (MultipartFile f : mediaFiles) {
+            System.out.println(" - " + f.getOriginalFilename());
+        }
+
+        return ResponseEntity.ok(
+                postService.create(content, accessModifier, sharedPostId,
+                        mediaFiles != null ? Arrays.asList(mediaFiles) : List.of())
+        );
     }
 
     @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<PostResponse> update(@ModelAttribute PostRequest request) {
-        return ResponseEntity.ok(postService.update(request));
+    public ResponseEntity<PostResponse> update(
+            @RequestPart("postId") Long postId,
+            @RequestPart("content") String content,
+            @RequestPart(value = "accessModifier", required = false) String accessModifier,
+            @RequestPart(value = "media", required = false) List<MultipartFile> mediaFiles,
+            @RequestPart(value = "removeMedia", required = false) Boolean removeMedia
+    ) {
+        return ResponseEntity.ok(postService.update(postId, content, accessModifier, mediaFiles, removeMedia));
     }
 
-    @PostMapping(value = "/share")
+    @PostMapping("/share")
     public ResponseEntity<PostResponse> sharePost(
             @RequestParam Long originalPostId,
             @RequestParam(required = false) String caption
@@ -53,9 +73,7 @@ public class PostController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<PageVO<PostResponse>> getMyPosts(
-            @ParameterObject Pageable pageable
-    ) {
+    public ResponseEntity<PageVO<PostResponse>> getMyPosts(@ParameterObject Pageable pageable) {
         return ResponseEntity.ok(postService.getMyPosts(pageable));
     }
 

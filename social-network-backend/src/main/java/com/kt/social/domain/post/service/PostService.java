@@ -5,10 +5,13 @@ import com.kt.social.domain.post.dto.PostRequest;
 import com.kt.social.domain.post.dto.PostResponse;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 public interface PostService {
-    PostResponse create(PostRequest request);
-    PostResponse update(PostRequest request);
+    PostResponse create(String content, String accessModifier, Long sharedPostId, List<MultipartFile> mediaFiles);
+    PostResponse update(Long postId, String content, String accessModifier, List<MultipartFile> mediaFiles, Boolean removeMedia);
     PostResponse getPostById(Long postId);
     PageVO<PostResponse> getMyPosts(Pageable pageable);
     PageVO<PostResponse> getUserPosts(Long userId, Pageable pageable);

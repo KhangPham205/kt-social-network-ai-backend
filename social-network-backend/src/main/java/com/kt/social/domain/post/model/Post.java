@@ -5,12 +5,15 @@ import com.kt.social.domain.moderation.enums.ModerationStatus;
 import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.common.entity.BaseEntity;
+import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -24,7 +27,9 @@ public class Post extends BaseEntity {
     @Column(nullable = false, columnDefinition = "text")
     private String content;
 
-    private String mediaUrl;
+    @Type(JsonBinaryType.class)
+    @Column(columnDefinition = "jsonb")
+    private List<Map<String, String>> media;
 
     private AccessScope accessModifier;
 

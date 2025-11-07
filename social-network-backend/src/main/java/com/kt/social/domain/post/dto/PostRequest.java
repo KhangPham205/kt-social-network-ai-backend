@@ -1,9 +1,11 @@
 package com.kt.social.domain.post.dto;
 
 import com.kt.social.domain.post.enums.AccessScope;
-import org.springframework.web.multipart.MultipartFile;
 
 import lombok.Data;
+
+import java.util.List;
+import java.util.Map;
 
 @Data
 public class PostRequest {
@@ -11,6 +13,6 @@ public class PostRequest {
     private String content;
     private AccessScope accessModifier;
     private Long sharedPostId;
-    private MultipartFile media;
+    private List<Map<String, Object>> media;
     private Boolean removeMedia; // flag để xóa media cũ khi update
 }

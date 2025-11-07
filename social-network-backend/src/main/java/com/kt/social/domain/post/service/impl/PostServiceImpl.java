@@ -31,9 +31,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -54,24 +56,30 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
-    public PostResponse create(PostRequest request) {
+    public PostResponse create(String content, String accessModifier, Long sharedPostId, List<MultipartFile> mediaFiles) {
         User author = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
-        String mediaUrl = null;
-
-        if (request.getMedia() != null && !request.getMedia().isEmpty()) {
-            mediaUrl = storageService.saveFile(request.getMedia(), "posts");
+        List<Map<String, String>> mediaList = List.of();
+        if (mediaFiles != null && !mediaFiles.isEmpty()) {
+            mediaList = mediaFiles.stream().map(file -> {
+                String url = storageService.saveFile(file, "posts");
+                String ext = getExtension(Objects.requireNonNull(file.getOriginalFilename()));
+                String type = isVideo(ext) ? "video" : "image";
+                return Map.of("type", type, "url", url);
+            }).toList();
         }
 
-        Post sharedPost = Optional.ofNullable(request.getSharedPostId())
+        Post sharedPost = Optional.ofNullable(sharedPostId)
                 .flatMap(postRepository::findById)
                 .orElse(null);
 
         Post post = Post.builder()
                 .author(author)
-                .content(request.getContent())
-                .mediaUrl(mediaUrl)
-                .accessModifier(request.getAccessModifier())
+                .content(content)
+                .media(mediaList)
+                .accessModifier(accessModifier != null
+                        ? AccessScope.valueOf(accessModifier)
+                        : AccessScope.PUBLIC)
                 .sharedPost(sharedPost)
                 .createdAt(Instant.now())
                 .build();
@@ -82,39 +90,38 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
-    public PostResponse update(PostRequest request) {
+    public PostResponse update(Long postId, String content, String accessModifier, List<MultipartFile> mediaFiles, Boolean removeMedia) {
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
-
-        Post post = postRepository.findById(request.getPostId())
+        Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         if (!post.getAuthor().getId().equals(currentUser.getId())) {
-            throw new BadRequestException("You are not authorized to update this post.");
+            throw new AccessDeniedException("You are not authorized to update this post.");
         }
 
-        post.setContent(request.getContent());
+        post.setContent(content);
+        if (accessModifier != null)
+            post.setAccessModifier(AccessScope.valueOf(accessModifier));
 
-        if (request.getAccessModifier() != null) {
-            post.setAccessModifier(request.getAccessModifier());
+        List<Map<String, String>> mediaList = post.getMedia() != null ? post.getMedia() : List.of();
+
+        if (Boolean.TRUE.equals(removeMedia)) {
+            mediaList.forEach(m -> storageService.deleteFile((String) m.get("url")));
+            mediaList = List.of();
         }
 
-        // Xóa media cũ nếu được yêu cầu
-        if (Boolean.TRUE.equals(request.getRemoveMedia()) && post.getMediaUrl() != null) {
-            storageService.deleteFile(post.getMediaUrl());
-            post.setMediaUrl(null);
+        if (mediaFiles != null && !mediaFiles.isEmpty()) {
+            List<Map<String, String>> uploaded = mediaFiles.stream().map(file -> {
+                String url = storageService.saveFile(file, "posts");
+                String ext = getExtension(Objects.requireNonNull(file.getOriginalFilename()));
+                String type = isVideo(ext) ? "video" : "image";
+                return Map.of("type", type, "url", url);
+            }).toList();
+            mediaList = uploaded; // hoặc nối thêm tùy ý
         }
 
-        // Upload media mới nếu có
-        if (request.getMedia() != null && !request.getMedia().isEmpty()) {
-            if (post.getMediaUrl() != null && request.getRemoveMedia()) {
-                storageService.deleteFile(post.getMediaUrl());
-            }
-            String mediaUrl = storageService.saveFile(request.getMedia(), "posts");
-            post.setMediaUrl(mediaUrl);
-        }
-
+        post.setMedia(mediaList);
         post.setUpdatedAt(Instant.now());
-
         postRepository.save(post);
         return postMapper.toDto(post);
     }
@@ -283,28 +290,19 @@ public class PostServiceImpl implements PostService {
     public void deletePost(Long postId) {
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
-        Post original = postRepository.findById(postId)
+        Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
-        // Kiểm tra quyền
-        boolean isAuthor = original.getAuthor().getId().equals(currentUser.getId());
-//        boolean isAdmin = currentUser.getRoles().stream()
-//                .anyMatch(role -> role.getName().equalsIgnoreCase("ROLE_ADMIN"));
-
-        if (!isAuthor) {
+        if (!post.getAuthor().getId().equals(currentUser.getId())) {
             throw new AccessDeniedException("You are not authorized to delete this post.");
         }
 
-        // Hủy liên kết các bài share
-        List<Post> shares = postRepository.findBySharedPost(original);
+        // Hủy liên kết share
+        List<Post> shares = postRepository.findBySharedPost(post);
         shares.forEach(shared -> shared.setSharedPost(null));
         postRepository.saveAll(shares);
 
-        // Xóa file media nếu có
-        Optional.ofNullable(original.getMediaUrl())
-                .ifPresent(storageService::deleteFile);
-
-        postRepository.delete(original);
+        postRepository.delete(post);
     }
 
     // --------------------- Helper methods -------------------------
@@ -375,5 +373,14 @@ public class PostServiceImpl implements PostService {
                 .numberOfElements(visiblePosts.size())
                 .content(visiblePosts)
                 .build();
+    }
+
+    private boolean isVideo(String ext) {
+        return List.of("mp4", "webm", "ogg", "mov", "quicktime").contains(ext.toLowerCase());
+    }
+
+    private String getExtension(String filename) {
+        int dot = filename.lastIndexOf(".");
+        return dot != -1 ? filename.substring(dot + 1).toLowerCase() : "";
     }
 }

@@ -20,6 +20,12 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     Page<Post> findByAuthor(User author, Pageable pageable);
     List<Post> findBySharedPost(Post sharedPost);
 
+    @Query(value = """
+    SELECT * FROM posts p
+    WHERE p.media @> cast(:filterJson AS jsonb)
+    """, nativeQuery = true)
+    List<Post> findByMediaType(@Param("filterJson") String filterJson);
+
     Page<Post> findAll(Specification<Post> spec, @NonNull Pageable pageable);
 
     @Query("SELECT COUNT(p) FROM Post p WHERE p.sharedPost.id = :postId")

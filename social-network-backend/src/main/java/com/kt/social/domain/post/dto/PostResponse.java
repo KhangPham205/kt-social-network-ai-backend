@@ -5,6 +5,8 @@ import com.kt.social.domain.react.dto.ReactSummaryDto;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -13,7 +15,7 @@ import java.time.Instant;
 public class PostResponse {
     private Long id;
     private String content;
-    private String mediaUrl;
+    private List<Map<String, String>> media;
     private AccessScope accessModifier;
 
     private int reactCount;
