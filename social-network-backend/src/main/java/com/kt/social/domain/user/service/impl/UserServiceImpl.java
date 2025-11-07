@@ -3,9 +3,11 @@ package com.kt.social.domain.user.service.impl;
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
+import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.service.BaseFilterService;
+import com.kt.social.common.utils.BlockUtils;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
@@ -23,10 +25,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashSet;
+
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> implements UserService {
 
+    private final BlockUtils blockUtils;
     private final UserCredentialRepository userCredentialRepository;
     private final UserRepository userRepository;
     private final UserRelaRepository userRelaRepository;
@@ -48,6 +53,11 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
     @Override
     public UserProfileDto getProfile(Long id) {
+        User current = getCurrentUser();
+        if (blockUtils.isBlocked(current.getId(), id) || blockUtils.isBlocked(id, current.getId())) {
+            throw new AccessDeniedException("You cannot view this profile");
+        }
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         return userMapper.toDto(user);
@@ -196,28 +206,28 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     public PageVO<UserRelationDto> searchUsers(String filter, Pageable pageable) {
         var currentUser = getCurrentUser();
 
-        Specification<User> baseSpec = (root, query, cb) -> cb.and(
-                cb.notEqual(root.get("id"), currentUser.getId()),
-                cb.isTrue(root.get("isActive"))
+        var blockedByMe = blockUtils.getAllBlockedIds(currentUser.getId());
+        var blockedMe = friendshipRepository.findBlockedUserIdsByTarget(currentUser.getId());
+        var totalBlocked = new HashSet<>(blockedByMe);
+        totalBlocked.addAll(blockedMe);
+
+        Specification<User> combinedSpec = (root1, query1, cb1) -> cb1.and(
+                cb1.notEqual(root1.get("id"), currentUser.getId()),
+                cb1.isTrue(root1.get("isActive")),
+                totalBlocked.isEmpty() ? cb1.conjunction() : cb1.not(root1.get("id").in(totalBlocked))
         );
 
-        Specification<User> combinedSpec = baseSpec;
-
         if (filter != null && !filter.isBlank()) {
-            // 🧩 Nếu filter là RSQL (chứa ==, =like=, ...)
             if (filter.contains("==") || filter.contains("=like=")) {
                 combinedSpec = combinedSpec.and(io.github.perplexhub.rsql.RSQLJPASupport.toSpecification(filter));
             } else {
-                // Nếu chỉ là chuỗi tìm kiếm thông thường
                 String likeFilter = "%" + filter.toLowerCase() + "%";
-
                 Specification<User> keywordSpec = (root, query, cb) -> cb.or(
                         cb.like(cb.lower(root.get("displayName")), likeFilter),
                         cb.like(cb.lower(root.join("credential").get("username")), likeFilter),
                         cb.like(cb.lower(root.join("userInfo").get("bio")), likeFilter),
                         cb.like(cb.lower(root.join("userInfo").get("favorites")), likeFilter)
                 );
-
                 combinedSpec = combinedSpec.and(keywordSpec);
             }
         }
@@ -247,9 +257,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        var blockedIds = blockUtils.getAllBlockedIds(viewer.getId());
+        blockedIds.addAll(friendshipRepository.findBlockedUserIdsByTarget(viewer.getId()));
+
         var followers = userRelaRepository.findByFollowing(target, pageable);
         var content = followers.getContent().stream()
                 .map(UserRela::getFollower)
+                .filter(u -> !blockedIds.contains(u.getId()))
                 .map(user -> mapToRelationDto(viewer, user))
                 .toList();
 
@@ -270,11 +284,16 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        var following = userRelaRepository.findByFollower(target, pageable);
+        var blockedIds = blockUtils.getAllBlockedIds(viewer.getId());
+        blockedIds.addAll(friendshipRepository.findBlockedUserIdsByTarget(viewer.getId()));
+
+        var following = userRelaRepository.findByFollowing(target, pageable);
         var content = following.getContent().stream()
-                .map(UserRela::getFollowing)
+                .map(UserRela::getFollower)
+                .filter(u -> !blockedIds.contains(u.getId()))
                 .map(user -> mapToRelationDto(viewer, user))
                 .toList();
+
 
         return PageVO.<UserRelationDto>builder()
                 .page(following.getNumber())

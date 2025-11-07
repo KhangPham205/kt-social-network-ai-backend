@@ -126,8 +126,6 @@ public class PostServiceImpl implements PostService {
         return postMapper.toDto(post);
     }
 
-    // ... (bên trong PostServiceImpl.java)
-
     @Override
     @Transactional(readOnly = true)
     public PostResponse getPostById(Long postId) {
@@ -138,7 +136,6 @@ public class PostServiceImpl implements PostService {
 
         User author = post.getAuthor();
 
-        // 1. Kiểm tra quyền truy cập (GIỮ NGUYÊN)
         switch (post.getAccessModifier()) {
             case PRIVATE -> {
                 // Chỉ tác giả mới xem được
@@ -158,7 +155,7 @@ public class PostServiceImpl implements PostService {
                 // Ai cũng xem được
             }
         }
-        
+
         return toResponseWithAccessCheck(viewer, post);
     }
 

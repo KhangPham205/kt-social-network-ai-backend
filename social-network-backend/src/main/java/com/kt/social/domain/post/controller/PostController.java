@@ -42,11 +42,6 @@ public class PostController {
             @RequestPart(value = "sharedPostId", required = false) Long sharedPostId,
             @RequestPart(value = "media", required = false) MultipartFile[] mediaFiles
     ) {
-        System.out.println("Number of files: " + (mediaFiles != null ? mediaFiles.length : 0));
-        for (MultipartFile f : mediaFiles) {
-            System.out.println(" - " + f.getOriginalFilename());
-        }
-
         return ResponseEntity.ok(
                 postService.create(content, accessModifier, sharedPostId,
                         mediaFiles != null ? Arrays.asList(mediaFiles) : List.of())
@@ -58,10 +53,11 @@ public class PostController {
             @RequestPart("postId") Long postId,
             @RequestPart("content") String content,
             @RequestPart(value = "accessModifier", required = false) String accessModifier,
-            @RequestPart(value = "media", required = false) List<MultipartFile> mediaFiles,
+            @RequestPart(value = "media", required = false) MultipartFile[] mediaFiles,
             @RequestPart(value = "removeMedia", required = false) Boolean removeMedia
     ) {
-        return ResponseEntity.ok(postService.update(postId, content, accessModifier, mediaFiles, removeMedia));
+        return ResponseEntity.ok(postService.update(postId, content, accessModifier,
+                mediaFiles != null ? Arrays.asList(mediaFiles) : List.of(), removeMedia));
     }
 
     @PostMapping("/share")

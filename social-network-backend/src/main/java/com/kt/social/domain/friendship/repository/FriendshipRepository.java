@@ -26,7 +26,7 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Long>, J
     boolean existsBySenderAndReceiverAndStatus(User user, User friend, FriendshipStatus status);
 
     default boolean existsByUserAndFriendAndStatusApproved(User user, User friend) {
-        return existsBySenderAndReceiverAndStatus(user, friend, FriendshipStatus.ACCEPTED);
+        return existsBySenderAndReceiverAndStatus(user, friend, FriendshipStatus.FRIEND);
     }
 
     // Lấy danh sách bạn bè khi mình là sender
@@ -44,4 +44,26 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Long>, J
         result.addAll(findAcceptedFriendsAsReceiver(user));
         return result;
     }
+
+    @Query("""
+    SELECT CASE
+        WHEN f.sender.id = :userId THEN f.receiver.id
+        ELSE f.sender.id
+    END
+    FROM Friendship f
+    WHERE (f.sender.id = :userId)
+      AND f.status = 'BLOCKED'
+""")
+    List<Long> findBlockedUserIds(@Param("userId") Long userId);
+
+    @Query("""
+    SELECT CASE
+        WHEN f.sender.id = :userId THEN f.receiver.id
+        ELSE f.sender.id
+    END
+    FROM Friendship f
+    WHERE (f.receiver.id = :userId)
+      AND f.status = 'BLOCKED'
+""")
+    List<Long> findBlockedUserIdsByTarget(Long id);
 }

@@ -4,6 +4,7 @@ import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.service.BaseFilterService;
+import com.kt.social.common.utils.BlockUtils;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
@@ -32,6 +33,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRelationDto> implements FriendshipService {
 
+    private final BlockUtils blockUtils;
     private final ConversationService conversationService;
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
@@ -45,6 +47,10 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     public FriendshipResponse sendRequest(Long userId, Long targetId) {
         if (userId.equals(targetId))
             throw new BadRequestException("You cannot send a friend request to yourself");
+
+        if (blockUtils.isBlocked(userId, targetId) || blockUtils.isBlocked(targetId, userId)) {
+            throw new BadRequestException("Cannot send request — one of you has blocked the other");
+        }
 
         User sender = getUser(userId);
         User receiver = getUser(targetId);
@@ -84,6 +90,10 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
 
         if (f.getStatus() != FriendshipStatus.PENDING) {
             throw new BadRequestException("Cannot approve a request that does not have status PENDING");
+        }
+
+        if (blockUtils.isBlocked(senderId, receiverId) || blockUtils.isBlocked(receiverId, senderId)) {
+            throw new BadRequestException("Cannot send request — one of you has blocked the other");
         }
 
         f.setStatus(FriendshipStatus.FRIEND);
