@@ -53,7 +53,7 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
-    public PostResponse create(String content, String accessModifier, Long sharedPostId, List<MultipartFile> mediaFiles) {
+    public PostResponse create(String content, String accessModifier, List<MultipartFile> mediaFiles) {
         User author = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
         List<Map<String, String>> mediaList = List.of();
@@ -66,10 +66,6 @@ public class PostServiceImpl implements PostService {
             }).toList();
         }
 
-        Post sharedPost = Optional.ofNullable(sharedPostId)
-                .flatMap(postRepository::findById)
-                .orElse(null);
-
         Post post = Post.builder()
                 .author(author)
                 .content(content)
@@ -77,7 +73,6 @@ public class PostServiceImpl implements PostService {
                 .accessModifier(accessModifier != null
                         ? AccessScope.valueOf(accessModifier)
                         : AccessScope.PUBLIC)
-                .sharedPost(sharedPost)
                 .createdAt(Instant.now())
                 .build();
 

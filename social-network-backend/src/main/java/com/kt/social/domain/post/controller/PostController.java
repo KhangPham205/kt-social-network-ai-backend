@@ -4,6 +4,8 @@ import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.post.dto.PostRequest;
 import com.kt.social.domain.post.dto.PostResponse;
 import com.kt.social.domain.post.service.PostService;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -39,23 +41,25 @@ public class PostController {
     public ResponseEntity<PostResponse> create(
             @RequestPart("content") String content,
             @RequestPart(value = "accessModifier", required = false) String accessModifier,
-            @RequestPart(value = "sharedPostId", required = false) Long sharedPostId,
-            @RequestPart(value = "media", required = false) MultipartFile[] mediaFiles
+
+            @Parameter(schema = @Schema(type = "string", format = "binary"))
+            @RequestPart(value = "media", required = false) List<MultipartFile> mediaFiles
     ) {
         return ResponseEntity.ok(
-                postService.create(content, accessModifier, sharedPostId,
-                        mediaFiles != null ? Arrays.asList(mediaFiles) : List.of())
+                postService.create(content, accessModifier, mediaFiles)
         );
     }
 
     @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PostResponse> update(
             @RequestPart("postId") Long postId,
-            @RequestPart("content") String content,
+            @RequestPart(value = "content", required = false) String content,
             @RequestPart(value = "accessModifier", required = false) String accessModifier,
             @RequestPart(value = "keepMediaUrls", required = false) List<String> keepMediaUrls,
             @RequestPart(value = "removeMediaUrls", required = false) List<String> removeMediaUrls,
-            @RequestPart(value = "media", required = false) MultipartFile[] mediaFiles
+
+            @Parameter(schema = @Schema(type = "string", format = "binary"))
+            @RequestPart(value = "media", required = false) List<MultipartFile> mediaFiles
     ) {
         return ResponseEntity.ok(postService.update(
                 postId,
@@ -63,7 +67,7 @@ public class PostController {
                 accessModifier,
                 keepMediaUrls,
                 removeMediaUrls,
-                mediaFiles != null ? Arrays.asList(mediaFiles) : List.of()
+                mediaFiles
         ));
     }
 
