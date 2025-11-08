@@ -1,60 +1,65 @@
 package com.kt.social.infra.storage.service;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import com.kt.social.common.exception.BadRequestException;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.*;
-import java.util.UUID;
+import java.util.Map;
 
 @Service
+@RequiredArgsConstructor
 public class StorageService {
 
-    @Value("${file.upload-dir}")
-    private String uploadDir;  // Ví dụ: C:/uploads/
-
-    @Value("${file.base-url}")
-    private String baseUrl;    // Ví dụ: http://localhost:8080/files/
+    private final Cloudinary cloudinary;
 
     /**
-     * Lưu file vào thư mục con cụ thể (ví dụ "posts/media").
-     * Trả về đường dẫn URL công khai dạng http://localhost:8080/files/posts/media/xyz.jpg
+     * Upload file lên Cloudinary
+     * @param file file gửi từ client
+     * @param folder thư mục con trên Cloudinary (vd: "posts", "avatars", ...)
+     * @return URL public của file
      */
-    public String saveFile(MultipartFile file, String subFolder) {
+    public String saveFile(MultipartFile file, String folder) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("File is empty or null");
         }
 
-        String extension = StringUtils.getFilenameExtension(file.getOriginalFilename());
-        String fileName = UUID.randomUUID() + "." + extension;
-        Path targetFolder = Paths.get(uploadDir, subFolder).toAbsolutePath().normalize();
-
         try {
-            Files.createDirectories(targetFolder);
-            Path targetFile = targetFolder.resolve(fileName);
-            Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
+            Map uploadResult = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "auto" // Cho phép ảnh hoặc video
+                    )
+            );
 
-            return baseUrl + "/" + subFolder + "/" + fileName;
-        } catch (Error | IOException e) {
-            throw new BadRequestException(e.getMessage());
+            return uploadResult.get("secure_url").toString();
+
+        } catch (IOException e) {
+            throw new BadRequestException("Upload to Cloudinary failed: " + e.getMessage());
         }
     }
 
     /**
-     * Xóa file dựa trên URL public
+     * Xóa file trên Cloudinary dựa theo URL public
      */
     public void deleteFile(String fileUrl) {
         if (fileUrl == null || fileUrl.isBlank()) return;
 
         try {
-            String relativePath = fileUrl.replace(baseUrl + "/", "");
-            Path filePath = Paths.get(uploadDir).resolve(relativePath).normalize();
-            Files.deleteIfExists(filePath);
+            // Extract public_id từ URL: https://res.cloudinary.com/<cloud_name>/image/upload/v123456/posts/abc123.jpg
+            String[] parts = fileUrl.split("/");
+            String publicIdWithExt = parts[parts.length - 1]; // abc123.jpg
+            String publicId = publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'));
+
+            // Xóa theo public_id
+            cloudinary.uploader().destroy("posts/" + publicId, ObjectUtils.asMap("resource_type", "auto"));
+
         } catch (IOException e) {
-            System.err.println("Failed to delete old file: " + e.getMessage());
+            System.err.println("Failed to delete from Cloudinary: " + e.getMessage());
         }
     }
 }
