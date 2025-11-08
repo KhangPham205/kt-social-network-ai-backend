@@ -82,7 +82,7 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
-    public PostResponse update(Long postId, String content, String accessModifier,
+    public PostResponse update(Long postId, String content, AccessScope accessModifier,
                                List<String> keepMediaUrls, List<String> removeMediaUrls,
                                List<MultipartFile> mediaFiles) {
 
@@ -96,7 +96,7 @@ public class PostServiceImpl implements PostService {
 
         post.setContent(content);
         if (accessModifier != null) {
-            post.setAccessModifier(AccessScope.valueOf(accessModifier));
+            post.setAccessModifier(accessModifier);
         }
 
         List<Map<String, String>> mediaList = new ArrayList<>();
@@ -188,7 +188,7 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
-    public PostResponse sharePost(Long originalPostId, String caption) {
+    public PostResponse sharePost(Long originalPostId, String caption, AccessScope accessScope) {
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
         Post original = postRepository.findById(originalPostId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
@@ -213,7 +213,7 @@ public class PostServiceImpl implements PostService {
                 .author(currentUser)
                 .content(caption)
                 .sharedPost(original)
-                .accessModifier(AccessScope.PUBLIC)
+                .accessModifier(accessScope)
                 .build();
 
         postRepository.save(shared);

@@ -3,6 +3,8 @@ package com.kt.social.domain.post.controller;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.post.dto.PostRequest;
 import com.kt.social.domain.post.dto.PostResponse;
+import com.kt.social.domain.post.dto.UpdateCommentRequest;
+import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.post.service.PostService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -52,31 +54,25 @@ public class PostController {
 
     @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PostResponse> update(
-            @RequestPart("postId") Long postId,
-            @RequestPart(value = "content", required = false) String content,
-            @RequestPart(value = "accessModifier", required = false) String accessModifier,
-            @RequestPart(value = "keepMediaUrls", required = false) List<String> keepMediaUrls,
-            @RequestPart(value = "removeMediaUrls", required = false) List<String> removeMediaUrls,
-
-            @Parameter(schema = @Schema(type = "string", format = "binary"))
-            @RequestPart(value = "media", required = false) List<MultipartFile> mediaFiles
+            @ModelAttribute UpdateCommentRequest request
     ) {
         return ResponseEntity.ok(postService.update(
-                postId,
-                content,
-                accessModifier,
-                keepMediaUrls,
-                removeMediaUrls,
-                mediaFiles
+                request.getPostId(),
+                request.getContent(),
+                request.getAccessModifier(),
+                request.getKeepMediaUrls(),
+                request.getRemoveMediaUrls(),
+                request.getMediaFiles()
         ));
     }
 
     @PostMapping("/share")
     public ResponseEntity<PostResponse> sharePost(
             @RequestParam Long originalPostId,
-            @RequestParam(required = false) String caption
+            @RequestParam(required = false) String caption,
+            @RequestParam AccessScope accessScope
     ) {
-        return ResponseEntity.ok(postService.sharePost(originalPostId, caption));
+        return ResponseEntity.ok(postService.sharePost(originalPostId, caption, accessScope));
     }
 
     @GetMapping("/me")
