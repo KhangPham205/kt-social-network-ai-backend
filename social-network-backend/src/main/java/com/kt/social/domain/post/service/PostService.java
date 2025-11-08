@@ -11,7 +11,7 @@ import java.util.List;
 
 public interface PostService {
     PostResponse create(String content, String accessModifier, Long sharedPostId, List<MultipartFile> mediaFiles);
-    PostResponse update(Long postId, String content, String accessModifier, List<MultipartFile> mediaFiles, Boolean removeMedia);
+    PostResponse update(Long postId, String content, String accessModifier, List<String> keepMediaUrls, List<String> removeMediaUrls, List<MultipartFile> mediaFiles);
     PostResponse getPostById(Long postId);
     PageVO<PostResponse> getMyPosts(Pageable pageable);
     PageVO<PostResponse> getUserPosts(Long userId, Pageable pageable);

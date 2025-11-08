@@ -53,11 +53,18 @@ public class PostController {
             @RequestPart("postId") Long postId,
             @RequestPart("content") String content,
             @RequestPart(value = "accessModifier", required = false) String accessModifier,
-            @RequestPart(value = "media", required = false) MultipartFile[] mediaFiles,
-            @RequestPart(value = "removeMedia", required = false) Boolean removeMedia
+            @RequestPart(value = "keepMediaUrls", required = false) List<String> keepMediaUrls,
+            @RequestPart(value = "removeMediaUrls", required = false) List<String> removeMediaUrls,
+            @RequestPart(value = "media", required = false) MultipartFile[] mediaFiles
     ) {
-        return ResponseEntity.ok(postService.update(postId, content, accessModifier,
-                mediaFiles != null ? Arrays.asList(mediaFiles) : List.of(), removeMedia));
+        return ResponseEntity.ok(postService.update(
+                postId,
+                content,
+                accessModifier,
+                keepMediaUrls,
+                removeMediaUrls,
+                mediaFiles != null ? Arrays.asList(mediaFiles) : List.of()
+        ));
     }
 
     @PostMapping("/share")

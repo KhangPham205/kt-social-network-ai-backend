@@ -34,10 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Stream;
 
 @Service
@@ -90,7 +87,10 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
-    public PostResponse update(Long postId, String content, String accessModifier, List<MultipartFile> mediaFiles, Boolean removeMedia) {
+    public PostResponse update(Long postId, String content, String accessModifier,
+                               List<String> keepMediaUrls, List<String> removeMediaUrls,
+                               List<MultipartFile> mediaFiles) {
+
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
@@ -100,29 +100,40 @@ public class PostServiceImpl implements PostService {
         }
 
         post.setContent(content);
-        if (accessModifier != null)
+        if (accessModifier != null) {
             post.setAccessModifier(AccessScope.valueOf(accessModifier));
-
-        List<Map<String, String>> mediaList = post.getMedia() != null ? post.getMedia() : List.of();
-
-        if (Boolean.TRUE.equals(removeMedia)) {
-            mediaList.forEach(m -> storageService.deleteFile((String) m.get("url")));
-            mediaList = List.of();
         }
 
+        List<Map<String, String>> mediaList = new ArrayList<>();
+
+        // Giữ lại media cũ
+        if (keepMediaUrls != null) {
+            for (String url : keepMediaUrls) {
+                mediaList.add(Map.of("type", getTypeFromUrl(url), "url", url));
+            }
+        }
+
+        // Xóa media cũ
+        if (removeMediaUrls != null) {
+            removeMediaUrls.forEach(storageService::deleteFile);
+        }
+
+        // Thêm media mới
         if (mediaFiles != null && !mediaFiles.isEmpty()) {
-            List<Map<String, String>> uploaded = mediaFiles.stream().map(file -> {
-                String url = storageService.saveFile(file, "posts");
-                String ext = getExtension(Objects.requireNonNull(file.getOriginalFilename()));
-                String type = isVideo(ext) ? "video" : "image";
-                return Map.of("type", type, "url", url);
-            }).toList();
-            mediaList = uploaded; // hoặc nối thêm tùy ý
+            List<Map<String, String>> uploaded = mediaFiles.stream()
+                    .map(file -> {
+                        String url = storageService.saveFile(file, "posts");
+                        String ext = getExtension(Objects.requireNonNull(file.getOriginalFilename()));
+                        String type = isVideo(ext) ? "video" : "image";
+                        return Map.of("type", type, "url", url);
+                    }).toList();
+            mediaList.addAll(uploaded);
         }
 
         post.setMedia(mediaList);
         post.setUpdatedAt(Instant.now());
         postRepository.save(post);
+
         return postMapper.toDto(post);
     }
 
@@ -367,5 +378,10 @@ public class PostServiceImpl implements PostService {
     private String getExtension(String filename) {
         int dot = filename.lastIndexOf(".");
         return dot != -1 ? filename.substring(dot + 1).toLowerCase() : "";
+    }
+
+    private String getTypeFromUrl(String url) {
+        String ext = getExtension(url);
+        return isVideo(ext) ? "video" : "image";
     }
 }

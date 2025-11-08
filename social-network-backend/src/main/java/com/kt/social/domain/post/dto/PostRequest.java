@@ -14,5 +14,4 @@ public class PostRequest {
     private AccessScope accessModifier;
     private Long sharedPostId;
     private List<Map<String, Object>> media;
-    private Boolean removeMedia; // flag để xóa media cũ khi update
 }
