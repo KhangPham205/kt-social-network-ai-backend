@@ -60,13 +60,11 @@ public class CommentServiceImpl implements CommentService {
         }
 
         List<Map<String, String>> mediaList = List.of();
-        if (request.getMediaFiles() != null && !request.getMediaFiles().isEmpty()) {
-            mediaList = request.getMediaFiles().stream().map(file -> {
-                String url = storageService.saveFile(file, "comments");
-                String ext = getExtension(file.getOriginalFilename());
-                String type = isVideo(ext) ? "video" : "image";
-                return Map.of("url", url, "type", type);
-            }).toList();
+        if (request.getMediaFile() != null && !request.getMediaFile().isEmpty()) {
+            String url = storageService.saveFile(request.getMediaFile(), "comments");
+            String ext = getExtension(request.getMediaFile().getOriginalFilename());
+            String type = isVideo(ext) ? "video" : "image";
+            mediaList = List.of(Map.of("url", url, "type", type));
         }
 
         Comment comment = Comment.builder()
@@ -95,31 +93,41 @@ public class CommentServiceImpl implements CommentService {
             throw new AccessDeniedException("You can only edit your own comment");
         }
 
+        // Cập nhật nội dung nếu có
         if (request.getContent() != null) {
             comment.setContent(request.getContent());
         }
 
+        // Xóa media cũ nếu removeMedia = true
         if (Boolean.TRUE.equals(request.getRemoveMedia())) {
-            if (comment.getMedia() != null) {
-                comment.getMedia().forEach(m -> storageService.deleteFile(m.get("url")));
+            if (comment.getMedia() != null && !comment.getMedia().isEmpty()) {
+                comment.getMedia().forEach(m -> {
+                    String url = m.get("url");
+                    if (url != null && !url.isBlank()) {
+                        storageService.deleteFile(url);
+                    }
+                });
             }
             comment.setMedia(List.of());
         }
 
-        if (request.getMediaFiles() != null && !request.getMediaFiles().isEmpty()) {
-            List<Map<String, String>> newMedia = new ArrayList<>(request.getMediaFiles().stream().map(file -> {
-                String url = storageService.saveFile(file, "comments");
-                String ext = getExtension(Objects.requireNonNull(file.getOriginalFilename()));
-                String type = isVideo(ext) ? "video" : "image";
-                return Map.of("url", url, "type", type);
-            }).toList());
-
-            // Nếu removeMedia = false, nối thêm vào media cũ
-            if (!Boolean.TRUE.equals(request.getRemoveMedia()) && comment.getMedia() != null) {
-                newMedia.addAll(comment.getMedia());
+        // Upload file mới (1 file duy nhất)
+        if (request.getMediaFile() != null && !request.getMediaFile().isEmpty()) {
+            // Nếu removeMedia = false, vẫn xóa media cũ trước khi thêm mới
+            if (comment.getMedia() != null && !comment.getMedia().isEmpty()) {
+                comment.getMedia().forEach(m -> {
+                    String url = m.get("url");
+                    if (url != null && !url.isBlank()) {
+                        storageService.deleteFile(url);
+                    }
+                });
             }
 
-            comment.setMedia(newMedia);
+            String url = storageService.saveFile(request.getMediaFile(), "comments");
+            String ext = getExtension(Objects.requireNonNull(request.getMediaFile().getOriginalFilename()));
+            String type = isVideo(ext) ? "video" : "image";
+
+            comment.setMedia(List.of(Map.of("url", url, "type", type)));
         }
 
         commentRepository.save(comment);
