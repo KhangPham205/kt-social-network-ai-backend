@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -55,8 +56,11 @@ public class StorageService {
             String publicIdWithExt = parts[parts.length - 1]; // abc123.jpg
             String publicId = publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'));
 
+            String ext = fileUrl.substring(fileUrl.lastIndexOf('.') + 1).toLowerCase();
+            String type = List.of("mp4", "mov", "avi").contains(ext) ? "video" : "image";
+
             // Xóa theo public_id
-            cloudinary.uploader().destroy("posts/" + publicId, ObjectUtils.asMap("resource_type", "auto"));
+            cloudinary.uploader().destroy("posts/" + publicId, ObjectUtils.asMap("resource_type", type));
 
         } catch (IOException e) {
             System.err.println("Failed to delete from Cloudinary: " + e.getMessage());
