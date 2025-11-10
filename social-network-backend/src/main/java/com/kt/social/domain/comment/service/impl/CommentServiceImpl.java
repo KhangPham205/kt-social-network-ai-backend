@@ -27,7 +27,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -56,14 +59,19 @@ public class CommentServiceImpl implements CommentService {
                     .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
         }
 
-        String mediaUrl = null;
-        if (request.getMediaFile() != null && !request.getMediaFile().isEmpty()) {
-            mediaUrl = storageService.saveFile(request.getMediaFile(), "comments");
+        List<Map<String, String>> mediaList = List.of();
+        if (request.getMediaFiles() != null && !request.getMediaFiles().isEmpty()) {
+            mediaList = request.getMediaFiles().stream().map(file -> {
+                String url = storageService.saveFile(file, "comments");
+                String ext = getExtension(file.getOriginalFilename());
+                String type = isVideo(ext) ? "video" : "image";
+                return Map.of("url", url, "type", type);
+            }).toList();
         }
 
         Comment comment = Comment.builder()
                 .content(request.getContent())
-                .mediaUrl(mediaUrl)
+                .media(mediaList)
                 .post(post)
                 .author(author)
                 .parent(parent)
@@ -80,7 +88,6 @@ public class CommentServiceImpl implements CommentService {
     @Transactional
     public CommentResponse updateComment(UpdateCommentRequest request) {
         User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
-
         Comment comment = commentRepository.findById(request.getCommentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
@@ -88,17 +95,31 @@ public class CommentServiceImpl implements CommentService {
             throw new AccessDeniedException("You can only edit your own comment");
         }
 
-        if (request.getContent() != null) comment.setContent(request.getContent());
-
-        if (Boolean.TRUE.equals(request.getRemoveImage()) && comment.getMediaUrl() != null) {
-            storageService.deleteFile(comment.getMediaUrl());
-            comment.setMediaUrl(null);
+        if (request.getContent() != null) {
+            comment.setContent(request.getContent());
         }
 
-        if (request.getImageFile() != null && !request.getImageFile().isEmpty()) {
-            if (comment.getMediaUrl() != null) storageService.deleteFile(comment.getMediaUrl());
-            String newImageUrl = storageService.saveFile(request.getImageFile(), "comments");
-            comment.setMediaUrl(newImageUrl);
+        if (Boolean.TRUE.equals(request.getRemoveMedia())) {
+            if (comment.getMedia() != null) {
+                comment.getMedia().forEach(m -> storageService.deleteFile(m.get("url")));
+            }
+            comment.setMedia(List.of());
+        }
+
+        if (request.getMediaFiles() != null && !request.getMediaFiles().isEmpty()) {
+            List<Map<String, String>> newMedia = new ArrayList<>(request.getMediaFiles().stream().map(file -> {
+                String url = storageService.saveFile(file, "comments");
+                String ext = getExtension(Objects.requireNonNull(file.getOriginalFilename()));
+                String type = isVideo(ext) ? "video" : "image";
+                return Map.of("url", url, "type", type);
+            }).toList());
+
+            // Nếu removeMedia = false, nối thêm vào media cũ
+            if (!Boolean.TRUE.equals(request.getRemoveMedia()) && comment.getMedia() != null) {
+                newMedia.addAll(comment.getMedia());
+            }
+
+            comment.setMedia(newMedia);
         }
 
         commentRepository.save(comment);
@@ -206,5 +227,14 @@ public class CommentServiceImpl implements CommentService {
                 if (i == 2) throw e; // thử tối đa 3 lần
             }
         }
+    }
+
+    private boolean isVideo(String ext) {
+        return List.of("mp4", "webm", "ogg", "mov", "quicktime").contains(ext.toLowerCase());
+    }
+
+    private String getExtension(String filename) {
+        int dot = filename.lastIndexOf(".");
+        return dot != -1 ? filename.substring(dot + 1).toLowerCase() : "";
     }
 }

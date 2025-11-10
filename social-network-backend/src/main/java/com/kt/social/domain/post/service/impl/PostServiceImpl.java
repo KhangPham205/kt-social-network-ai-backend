@@ -10,6 +10,7 @@ import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.post.dto.PostRequest;
 import com.kt.social.domain.post.dto.PostResponse;
+import com.kt.social.domain.post.dto.UpdatePostRequest;
 import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.post.mapper.PostMapper;
 import com.kt.social.domain.post.model.Post;
@@ -82,40 +83,38 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional
-    public PostResponse update(Long postId, String content, AccessScope accessModifier,
-                               List<String> keepMediaUrls, List<String> removeMediaUrls,
-                               List<MultipartFile> mediaFiles) {
+    public PostResponse update(UpdatePostRequest request) {
 
         User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         if (!post.getAuthor().getId().equals(currentUser.getId())) {
             throw new AccessDeniedException("You are not authorized to update this post.");
         }
 
-        post.setContent(content);
-        if (accessModifier != null) {
-            post.setAccessModifier(accessModifier);
+        post.setContent(request.getContent());
+        if (request.getAccessModifier() != null) {
+            post.setAccessModifier(AccessScope.valueOf(request.getAccessModifier()));
         }
 
         List<Map<String, String>> mediaList = new ArrayList<>();
 
         // Giữ lại media cũ
-        if (keepMediaUrls != null) {
-            for (String url : keepMediaUrls) {
+        if (request.getKeepMediaUrls() != null) {
+            for (String url : request.getKeepMediaUrls()) {
                 mediaList.add(Map.of("type", getTypeFromUrl(url), "url", url));
             }
         }
 
         // Xóa media cũ
-        if (removeMediaUrls != null) {
-            removeMediaUrls.forEach(storageService::deleteFile);
+        if (request.getRemoveMediaUrls() != null) {
+            request.getRemoveMediaUrls().forEach(storageService::deleteFile);
         }
 
         // Thêm media mới
-        if (mediaFiles != null && !mediaFiles.isEmpty()) {
-            List<Map<String, String>> uploaded = mediaFiles.stream()
+        if (request.getMediaFiles() != null && !request.getMediaFiles().isEmpty()) {
+            List<Map<String, String>> uploaded = request.getMediaFiles().stream()
                     .map(file -> {
                         String url = storageService.saveFile(file, "posts");
                         String ext = getExtension(Objects.requireNonNull(file.getOriginalFilename()));

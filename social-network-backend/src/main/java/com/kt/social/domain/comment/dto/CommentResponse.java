@@ -2,8 +2,10 @@ package com.kt.social.domain.comment.dto;
 
 import com.kt.social.domain.react.dto.ReactSummaryDto;
 import lombok.*;
+
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -22,7 +24,7 @@ public class CommentResponse {
     private Long parentId; // để biết là reply của ai
 
     private String content;
-    private String mediaUrl;
+    private List<Map<String, String>> media; // thay cho mediaUrl
 
     private Integer reactCount;
     private Integer childrenCount;

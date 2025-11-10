@@ -2,14 +2,17 @@ package com.kt.social.domain.comment.model;
 
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.user.model.User;
+import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Type;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Entity
 @Data
@@ -40,8 +43,9 @@ public class Comment {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    private String mediaUrl;
-
+    @Type(JsonBinaryType.class)
+    @Column(columnDefinition = "jsonb")
+    private List<Map<String, String>> media;
     private int reactCount;
 
     @CreationTimestamp

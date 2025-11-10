@@ -1,13 +1,13 @@
 package com.kt.social.domain.post.controller;
 
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.post.dto.PostRequest;
 import com.kt.social.domain.post.dto.PostResponse;
-import com.kt.social.domain.post.dto.UpdateCommentRequest;
+import com.kt.social.domain.post.dto.UpdatePostRequest;
 import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.post.service.PostService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -16,7 +16,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Arrays;
 import java.util.List;
 
 @RestController
@@ -53,17 +52,8 @@ public class PostController {
     }
 
     @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<PostResponse> update(
-            @ModelAttribute UpdateCommentRequest request
-    ) {
-        return ResponseEntity.ok(postService.update(
-                request.getPostId(),
-                request.getContent(),
-                request.getAccessModifier(),
-                request.getKeepMediaUrls(),
-                request.getRemoveMediaUrls(),
-                request.getMediaFiles()
-        ));
+    public ResponseEntity<PostResponse> update(@Valid @ModelAttribute UpdatePostRequest request) {
+        return ResponseEntity.ok(postService.update(request));
     }
 
     @PostMapping("/share")
