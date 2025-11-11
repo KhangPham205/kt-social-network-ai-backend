@@ -16,11 +16,12 @@ import com.kt.social.domain.user.mapper.UserMapper;
 import com.kt.social.domain.user.model.*;
 import com.kt.social.domain.user.repository.*;
 import com.kt.social.domain.user.service.UserService;
-import com.kt.social.infra.storage.service.StorageService;
+import com.kt.social.infra.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,14 +42,19 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
     @Override
     public User getCurrentUser() {
-        String username = SecurityUtils.getCurrentUsername()
-                .orElseThrow(() -> new BadRequestException("User not authenticated or session expired"));
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null)
+            throw new ResourceNotFoundException("Authentication missing");
 
-        User user = userRepository.findByCredentialUsername(username);
-        if (user == null) {
-            throw new ResourceNotFoundException("Not found user according to the token: " + username);
+        Long userId;
+        try {
+            userId = Long.parseLong(auth.getName());
+        } catch (NumberFormatException e) {
+            throw new ResourceNotFoundException("Invalid principal id: " + auth.getName());
         }
-        return user;
+
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Not found user according to the token: " + userId));
     }
 
     @Override

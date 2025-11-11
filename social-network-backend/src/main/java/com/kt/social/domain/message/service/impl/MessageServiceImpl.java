@@ -4,121 +4,125 @@ import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.domain.message.dto.MessageRequest;
-import com.kt.social.domain.message.dto.MessageResponse;
-import com.kt.social.domain.message.mapper.MessageMapper;
-import com.kt.social.domain.message.model.*;
-import com.kt.social.domain.message.repository.*;
+import com.kt.social.domain.message.model.Conversation;
+import com.kt.social.domain.message.repository.ConversationRepository;
+import com.kt.social.domain.message.service.MessageService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
-import com.kt.social.infra.storage.service.StorageService;
+import com.kt.social.infra.storage.StorageService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-public class MessageServiceImpl implements com.kt.social.domain.message.service.MessageService {
+public class MessageServiceImpl implements MessageService {
 
-    private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
-    private final ConversationMemberRepository memberRepository;
-    private final MessageReceiptRepository receiptRepository;
-    private final MessageMapper messageMapper;
+    private final StorageService storageService;
     private final UserRepository userRepository;
     private final UserCredentialRepository credRepo;
-    private final StorageService storageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
+    /**
+     * Gửi tin nhắn từ HTTP (có file)
+     */
     @Override
     @Transactional
-    public MessageResponse sendMessage(MessageRequest req) {
+    public Map<String, Object> sendMessage(MessageRequest req) {
         User sender = SecurityUtils.getCurrentUser(credRepo, userRepository);
-        Conversation convo = conversationRepository.findById(req.getConversationId())
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
-        String mediaUrl = req.getMediaUrl();
-        if (req.getMediaFile() != null && !req.getMediaFile().isEmpty()) {
-            // upload ảnh (nếu có StorageService)
-            mediaUrl = storageService.saveFile(req.getMediaFile(), "messages");
-        }
+        // Tạo tin nhắn (logic của bạn đã có)
+        Map<String, Object> messageMap = createMessage(sender, req.getConversationId(), req.getContent(), req.getReplyToId(), req.getMediaFiles());
 
-        Message msg = Message.builder()
-                .conversation(convo)
-                .sender(sender)
-                .replyId(req.getReplyToId())
-                .content(req.getContent())
-                .mediaUrl(mediaUrl)
-                .createdAt(Instant.now())
-                .build();
+        // Phát tin nhắn tới kênh STOMP
+        broadcastMessage(req.getConversationId(), messageMap);
 
-        Message saved = messageRepository.save(msg);
-
-        // receipts
-        List<ConversationMember> members = memberRepository.findByConversation(convo);
-        for (ConversationMember m : members) {
-            MessageReceipt r = MessageReceipt.builder()
-                    .message(saved)
-                    .user(m.getUser())
-                    .isRead(m.getUser().getId().equals(sender.getId()))
-                    .readAt(m.getUser().getId().equals(sender.getId()) ? Instant.now() : null)
-                    .build();
-            receiptRepository.save(r);
-        }
-
-        MessageResponse dto = messageMapper.toDto(saved);
-        dto.setIsRead(true);
-        return dto;
+        return messageMap;
     }
 
+    /**
+     * Gửi tin nhắn từ WebSocket (chỉ text)
+     * (Đây là phương thức mới được gọi bởi ChatStompController)
+     */
     @Override
     @Transactional
-    public void markAsRead(Long messageId) {
-        User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
-        MessageReceipt receipt = receiptRepository.findByMessageIdAndUserId(messageId, current.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Receipt not found"));
-        receipt.setIsRead(true);
-        receipt.setReadAt(Instant.now());
-        receiptRepository.save(receipt);
-    }
-
-    @Override
-    public List<Long> getConversationMembers(Long conversationId) {
-        return memberRepository.findByConversationId(conversationId)
-                .stream().map(cm -> cm.getUser().getId()).collect(Collectors.toList());
-    }
-
-    @Override
-    public Page<MessageResponse> getMessagesByConversation(Long conversationId, Pageable pageable) {
-        Conversation conv = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
-
-        Page<Message> page = messageRepository.findByConversationOrderByCreatedAtDesc(conv, pageable);
-
-        return page.map(messageMapper::toDto);
-    }
-
-    @Transactional
-    public MessageResponse sendMessageAs(Long userId, MessageRequest req) {
-        User sender = userRepository.findById(userId)
+    public void sendMessageAs(Long senderId, MessageRequest req) {
+        User sender = userRepository.findById(senderId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        Conversation convo = conversationRepository.findById(req.getConversationId())
+
+        // Tạo tin nhắn (không có file media)
+        Map<String, Object> messageMap = createMessage(sender, req.getConversationId(), req.getContent(), req.getReplyToId(), null);
+
+        // Phát tin nhắn tới kênh STOMP
+        broadcastMessage(req.getConversationId(), messageMap);
+    }
+
+    /**
+     * Logic chung để tạo và lưu tin nhắn
+     */
+    private Map<String, Object> createMessage(User sender, Long conversationId, String content, Long replyToId, List<org.springframework.web.multipart.MultipartFile> mediaFiles) {
+        Conversation convo = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+        List<Map<String, Object>> messages = convo.getMessages() != null
+                ? new ArrayList<>(convo.getMessages())
+                : new ArrayList<>();
+
+        // Xử lý file (nếu có)
+        List<Map<String, Object>> mediaList = new ArrayList<>();
+        if (mediaFiles != null && !mediaFiles.isEmpty()) {
+            // (logic lưu file của bạn)
+            for (var file : mediaFiles) {
+                String url = storageService.saveFile(file, "messages");
+                String type = "file"; // (logic xác định type của bạn)
+                mediaList.add(Map.of("url", url, "type", type));
+            }
+        }
+
+        // Tạo đối tượng message
+        Map<String, Object> message = new LinkedHashMap<>();
+        message.put("id", UUID.randomUUID().toString());
+        message.put("senderId", sender.getId());
+        message.put("senderName", sender.getDisplayName());
+        message.put("senderAvatar", sender.getAvatarUrl());
+        message.put("content", content);
+        message.put("replyToId", replyToId);
+        message.put("media", mediaList);
+        message.put("timestamp", Instant.now().toString());
+
+        messages.addFirst(message); // Thêm vào đầu danh sách
+        convo.setMessages(messages);
+        conversationRepository.save(convo);
+
+        return message;
+    }
+
+    /**
+     * Logic chung để phát tin nhắn qua WebSocket
+     */
+    private void broadcastMessage(Long conversationId, Map<String, Object> messageMap) {
+        // Định nghĩa kênh STOMP
+        String destination = "/queue/conversation/" + conversationId;
+
+        // Gửi tin nhắn
+        // (Bạn nên chuyển 'messageMap' thành DTO, ví dụ 'MessageResponse')
+        messagingTemplate.convertAndSend(destination, messageMap);
+    }
+
+    /**
+     * Lấy danh sách tin nhắn (đã được sắp xếp mới nhất -> cũ nhất)
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getMessages(Long conversationId) {
+        Conversation convo = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
-        Message msg = Message.builder()
-                .conversation(convo)
-                .sender(sender)
-                .replyId(req.getReplyToId())
-                .content(req.getContent())
-                .mediaUrl(req.getMediaUrl())
-                .createdAt(Instant.now())
-                .build();
-
-        Message saved = messageRepository.save(msg);
-        return messageMapper.toDto(saved);
+        List<Map<String, Object>> messages = convo.getMessages();
+        return messages != null ? messages : List.of();
     }
 }

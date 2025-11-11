@@ -23,7 +23,7 @@ import com.kt.social.domain.user.model.UserRela;
 import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
-import com.kt.social.infra.storage.service.StorageService;
+import com.kt.social.infra.storage.StorageService;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;

@@ -1,14 +1,12 @@
 package com.kt.social.domain.message.controller;
 
-import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.message.dto.MessageResponse;
+import com.kt.social.domain.message.dto.MessageRequest;
 import com.kt.social.domain.message.service.MessageService;
 import lombok.RequiredArgsConstructor;
-import org.springdoc.core.annotations.ParameterObject;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/messages")
@@ -17,22 +15,13 @@ public class MessageController {
 
     private final MessageService messageService;
 
-    @GetMapping("/conversation/{conversationId}")
-    public ResponseEntity<PageVO<MessageResponse>> getConversationMessages(
-            @PathVariable Long conversationId,
-            @ParameterObject Pageable pageable
-    ) {
-        Page<MessageResponse> page = messageService.getMessagesByConversation(conversationId, pageable);
+    @PostMapping(consumes = "multipart/form-data")
+    public ResponseEntity<Map<String, Object>> sendMessage(@ModelAttribute MessageRequest req) {
+        return ResponseEntity.ok(messageService.sendMessage(req));
+    }
 
-        PageVO<MessageResponse> result = PageVO.<MessageResponse>builder()
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .numberOfElements(page.getNumberOfElements())
-                .content(page.getContent())
-                .build();
-
-        return ResponseEntity.ok(result);
+    @GetMapping("/{conversationId}")
+    public ResponseEntity<List<Map<String, Object>>> getMessages(@PathVariable Long conversationId) {
+        return ResponseEntity.ok(messageService.getMessages(conversationId));
     }
 }

@@ -4,6 +4,7 @@ import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.security.JwtProvider;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 import java.net.URI;
 import java.util.Map;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtHandshakeInterceptor implements HandshakeInterceptor {
@@ -51,7 +53,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             UserCredential userCred = credentialRepo.findByUsername(username)
                     .orElseThrow(() -> new RuntimeException("User not found: " + username));
 
-            // ✅ Lấy đúng id của user tương ứng
+            // Lấy đúng id của user tương ứng
             Long actualUserId = (userCred.getUser() != null) ? userCred.getUser().getId() : userId;
 
             // 🔥 Lưu đúng id user entity vào attributes
@@ -59,11 +61,11 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             attributes.put("userId", actualUserId);
             attributes.put("username", username);
 
-            System.out.printf("✅ WebSocket authenticated userId=%d username=%s%n", actualUserId, username);
 
             return true;
 
         } catch (Exception e) {
+            log.error("❌ HANDSHAKE FAILED: {}", e.getMessage(), e);
             System.out.println("❌ JWT handshake failed: " + e.getMessage());
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return false;

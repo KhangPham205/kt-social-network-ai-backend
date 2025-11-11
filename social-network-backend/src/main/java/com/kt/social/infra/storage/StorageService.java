@@ -1,4 +1,4 @@
-package com.kt.social.infra.storage.service;
+package com.kt.social.infra.storage;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;

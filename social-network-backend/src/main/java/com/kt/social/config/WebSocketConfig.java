@@ -1,26 +1,40 @@
 package com.kt.social.config;
 
-import com.kt.social.domain.message.service.MessageService;
 import com.kt.social.infra.websocket.JwtHandshakeInterceptor;
-import com.kt.social.infra.websocket.MessageWebSocketHandler;
+import com.kt.social.infra.websocket.StompPrincipalInterceptor; // <-- Import interceptor của bạn
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.socket.config.annotation.EnableWebSocket;
-import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
-import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import org.springframework.messaging.simp.config.ChannelRegistration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker; // <-- THAY ĐỔI LỚN
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer; // <-- THAY ĐỔI LỚN
 
 @Configuration
-@EnableWebSocket
+@EnableWebSocketMessageBroker
 @RequiredArgsConstructor
-public class WebSocketConfig implements WebSocketConfigurer {
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
-    private final MessageWebSocketHandler messageWebSocketHandler;
+    private final StompPrincipalInterceptor stompPrincipalInterceptor;
 
     @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(messageWebSocketHandler, "/ws", "/ws/chat", "/ws/notification")
+    public void configureMessageBroker(MessageBrokerRegistry registry) {
+        registry.enableSimpleBroker("/topic", "/queue");
+        registry.setApplicationDestinationPrefixes("/app");
+        registry.setUserDestinationPrefix("/user");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws", "/ws/chat", "/ws/notification")
                 .addInterceptors(jwtHandshakeInterceptor)
-                .setAllowedOriginPatterns("*");
+                .setAllowedOrigins("*");
+    }
+
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        // Đăng ký Interceptor của bạn để nó gán Principal (user) cho MỌI tin nhắn STOMP
+        registration.interceptors(stompPrincipalInterceptor);
     }
 }

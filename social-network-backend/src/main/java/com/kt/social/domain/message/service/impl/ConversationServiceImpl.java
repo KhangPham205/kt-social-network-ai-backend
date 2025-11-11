@@ -5,11 +5,13 @@ import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.domain.message.dto.ConversationCreateRequest;
 import com.kt.social.domain.message.dto.ConversationResponse;
+import com.kt.social.domain.message.enums.ConversationRole;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.model.ConversationMember;
 import com.kt.social.domain.message.model.ConversationMemberId;
 import com.kt.social.domain.message.repository.ConversationMemberRepository;
 import com.kt.social.domain.message.repository.ConversationRepository;
+import com.kt.social.domain.message.service.ConversationService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +24,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class ConversationServiceImpl implements com.kt.social.domain.message.service.ConversationService {
+public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final ConversationMemberRepository memberRepository;
@@ -32,12 +34,10 @@ public class ConversationServiceImpl implements com.kt.social.domain.message.ser
     @Override
     @Transactional
     public ConversationResponse createConversation(ConversationCreateRequest req) {
-        // Người tạo nhóm = user hiện tại
         User creator = SecurityUtils.getCurrentUser(credRepo, userRepository);
 
-        // Tạo conversation
         Conversation convo = Conversation.builder()
-                .isGroup(req.getIsGroup())
+                .isGroup(Boolean.TRUE.equals(req.getIsGroup()))
                 .title(req.getTitle())
                 .mediaUrl(req.getMediaUrl())
                 .createdAt(Instant.now())
@@ -45,17 +45,17 @@ public class ConversationServiceImpl implements com.kt.social.domain.message.ser
 
         Conversation saved = conversationRepository.save(convo);
 
-        // Thêm người tạo vào nhóm
+        // 🔹 Người tạo là OWNER
         ConversationMember owner = ConversationMember.builder()
                 .id(new ConversationMemberId(saved.getId(), creator.getId()))
                 .conversation(saved)
                 .user(creator)
                 .joinedAt(Instant.now())
-                .role("owner")
+                .role(ConversationRole.OWNER)
                 .build();
         memberRepository.save(owner);
 
-        // Thêm các thành viên khác
+        // 🔹 Các thành viên khác là MEMBER
         if (req.getMemberIds() != null) {
             for (Long userId : req.getMemberIds()) {
                 if (!userId.equals(creator.getId())) {
@@ -67,7 +67,7 @@ public class ConversationServiceImpl implements com.kt.social.domain.message.ser
                             .conversation(saved)
                             .user(member)
                             .joinedAt(Instant.now())
-                            .role("member")
+                            .role(ConversationRole.MEMBER)
                             .build();
                     memberRepository.save(cm);
                 }

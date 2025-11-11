@@ -84,7 +84,6 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .cors().and()
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
@@ -100,11 +99,10 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/api/auth/**",
                                 "/api/v1/auth/**",
-                                "/ws/**",
-                                "/ws",
                                 "/files/**",
                                 "/videos/**"
                         ).permitAll()
+                        .requestMatchers("/ws", "/ws/chat", "/ws/notification", "/ws/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore((Filter) jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

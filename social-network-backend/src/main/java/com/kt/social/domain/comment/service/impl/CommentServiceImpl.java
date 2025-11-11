@@ -18,7 +18,7 @@ import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
-import com.kt.social.infra.storage.service.StorageService;
+import com.kt.social.infra.storage.StorageService;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
