@@ -12,8 +12,6 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 public class SocialNetworkBackendApplication {
 
 	public static void main(String[] args) {
-		SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
 		SpringApplication.run(SocialNetworkBackendApplication.class, args);
 	}
-
 }

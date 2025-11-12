@@ -18,7 +18,7 @@ public class StompPrincipalInterceptor implements ChannelInterceptor {
 
     @Override
     public Message<?> preSend(@NonNull Message<?> message, @NonNull MessageChannel channel) {
-        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
+        StompHeaderAccessor accessor = StompHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
         if (accessor.getUser() == null) {
             if (accessor.getSessionAttributes() != null) {
@@ -31,9 +31,9 @@ public class StompPrincipalInterceptor implements ChannelInterceptor {
                             Collections.emptyList()
                     );
                     accessor.setUser(auth);
-                    if (SecurityContextHolder.getContext().getAuthentication() == null) {
-                        SecurityContextHolder.getContext().setAuthentication(auth);
-                    }
+//                    if (SecurityContextHolder.getContext().getAuthentication() == null) {
+//                        SecurityContextHolder.getContext().setAuthentication(auth);
+//                    }
                 } else {
                     log.warn("STOMP Interceptor: ❌ Không tìm thấy 'userId' trong session!");
                 }
