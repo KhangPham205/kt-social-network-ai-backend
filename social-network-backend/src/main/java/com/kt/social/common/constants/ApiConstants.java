@@ -58,7 +58,7 @@ public final class ApiConstants {
      * Đường dẫn gốc cho Friendship Controller
      * (Ví dụ: /api/v1/friendship)
      */
-    public static final String FRIENDSHIP = API_V1 + "/friendship";
+    public static final String FRIENDSHIP = API_V1 + "/friends";
 
     /**
      * Đường dẫn gốc cho Message/Conversation Controller
