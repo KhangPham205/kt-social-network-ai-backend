@@ -105,6 +105,7 @@ public class ConversationServiceImpl implements ConversationService {
                     ? c.getMessages().getFirst() // newest first
                     : null;
             List<Long> memberIds = c.getMembers().stream().map(m -> m.getUser().getId()).toList();
+            assert lastMessage != null;
             return Map.of(
                     "conversationId", c.getId(),
                     "title", c.getTitle(),

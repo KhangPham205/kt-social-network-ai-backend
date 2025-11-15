@@ -21,7 +21,6 @@ import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.domain.user.model.UserInfo;
 import com.kt.social.domain.user.repository.UserInfoRepository;
 import com.kt.social.domain.user.repository.UserRepository;
-import jakarta.mail.MessagingException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +33,8 @@ import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -53,25 +54,29 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
 
     @Override
+    @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
         if (userCredentialRepository.existsByUsername(registerRequest.getUsername())) {
             throw new BadRequestException("Username is already in use");
         }
 
         Role userRole = roleRepository.findByName("USER")
-                .orElseThrow(() -> new IllegalStateException("Role not found"));
+                .orElseThrow(() -> new IllegalStateException("Role 'USER' not found. Please seed database."));
+
+        Set<Role> initialRoles = new HashSet<>();
+        initialRoles.add(userRole);
 
         UserCredential userCredential = UserCredential.builder()
                 .username(registerRequest.getUsername())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .email(registerRequest.getEmail())
-                .role(userRole)
+                .roles(initialRoles) // <-- Gán Set
                 .status(AccountStatus.PENDING)
                 .build();
 
         userCredentialRepository.save(userCredential);
 
-        com.kt.social.domain.user.model.User user = com.kt.social.domain.user.model.User .builder()
+        com.kt.social.domain.user.model.User user = com.kt.social.domain.user.model.User.builder()
                 .displayName(registerRequest.getFullname())
                 .isActive(true)
                 .credential(userCredential)
@@ -107,8 +112,18 @@ public class AuthServiceImpl implements AuthService {
                     .build();
         }
 
+        com.kt.social.domain.user.model.User user = userCredential.getUser();
+
+        if (user == null) {
+            throw new IllegalStateException("Tài khoản " + userCredential.getUsername() + " không có User profile liên kết. Không thể đăng nhập.");
+        }
+
+        Long idForToken = user.getId();
+
         UserDetails userDetails = buildUserDetails(userCredential);
-        String accessToken = jwtProvider.generateToken(userDetails, userCredential.getId());
+
+        String accessToken = jwtProvider.generateToken(userDetails, idForToken);
+
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
 
         return LoginResponse.builder()
@@ -170,9 +185,14 @@ public class AuthServiceImpl implements AuthService {
 
     // --------------------- Helper methods --------------------------
     private UserDetails buildUserDetails(UserCredential userCredential) {
+        Set<Role> roles = userCredential.getRoles();
+        String[] roleNames = roles.stream()
+                .map(Role::getName)
+                .toArray(String[]::new);
+
         return User.withUsername(userCredential.getUsername())
                 .password(userCredential.getPassword())
-                .roles(userCredential.getRole().getName())
+                .roles(roleNames)
                 .build();
     }
 

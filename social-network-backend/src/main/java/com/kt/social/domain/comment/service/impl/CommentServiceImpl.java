@@ -1,7 +1,5 @@
 package com.kt.social.domain.comment.service.impl;
 
-import com.kt.social.auth.repository.UserCredentialRepository;
-import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
@@ -14,10 +12,11 @@ import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.comment.service.CommentService;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
+import com.kt.social.domain.react.dto.ReactSummaryDto;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
-import com.kt.social.domain.user.repository.UserRepository;
+import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.StorageService;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,9 +38,8 @@ public class CommentServiceImpl implements CommentService {
 
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
-    private final UserRepository userRepository;
-    private final UserCredentialRepository credRepo;
     private final CommentMapper commentMapper;
+    private final UserService userService;
     private final ReactService reactService;
     private final StorageService storageService;
 
@@ -49,7 +47,7 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional
     public CommentResponse createComment(CommentRequest request) {
-        User author = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User author = userService.getCurrentUser();
         Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
@@ -62,7 +60,7 @@ public class CommentServiceImpl implements CommentService {
         List<Map<String, String>> mediaList = List.of();
         if (request.getMediaFile() != null && !request.getMediaFile().isEmpty()) {
             String url = storageService.saveFile(request.getMediaFile(), "comments");
-            String ext = getExtension(request.getMediaFile().getOriginalFilename());
+            String ext = getExtension(Objects.requireNonNull(request.getMediaFile().getOriginalFilename()));
             String type = isVideo(ext) ? "video" : "image";
             mediaList = List.of(Map.of("url", url, "type", type));
         }
@@ -78,14 +76,14 @@ public class CommentServiceImpl implements CommentService {
 
         Comment saved = commentRepository.save(comment);
         safeUpdateCommentCount(post.getId(), 1);
-        return commentMapper.toDto(saved);
+        return toDtoWithChildrenAndReacts(saved, author.getId(), 0);
     }
 
     // ---------------- UPDATE ----------------
     @Override
     @Transactional
     public CommentResponse updateComment(UpdateCommentRequest request) {
-        User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User current = userService.getCurrentUser();
         Comment comment = commentRepository.findById(request.getCommentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
@@ -130,43 +128,23 @@ public class CommentServiceImpl implements CommentService {
             comment.setMedia(List.of(Map.of("url", url, "type", type)));
         }
 
-        commentRepository.save(comment);
-        return commentMapper.toDto(comment);
+        Comment saved = commentRepository.save(comment);
+
+        return toDtoWithChildrenAndReacts(saved, current.getId(), -1);
     }
 
     // ---------------- GET COMMENT ROOT (depth 0) ----------------
     @Override
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getCommentsByPost(Long postId, Pageable pageable) {
-        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User currentUser = userService.getCurrentUser();
 
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
         Page<Comment> rootComments = commentRepository.findByPostAndParentIsNull(post, pageable);
 
-        List<CommentResponse> content = rootComments.stream()
-                .map(comment -> {
-                    CommentResponse dto = commentMapper.toDto(comment);
-                    dto.setDepth(0);
-                    dto.setParentId(null);
-                    dto.setChildrenCount(commentRepository.countByParent(comment));
-
-                    dto.setReactSummary(
-                            reactService.getReactSummary(comment.getId(), TargetType.COMMENT, currentUser.getId())
-                    );
-                    return dto;
-                })
-                .toList();
-
-        return PageVO.<CommentResponse>builder()
-                .page(rootComments.getNumber())
-                .size(rootComments.getSize())
-                .totalElements(rootComments.getTotalElements())
-                .totalPages(rootComments.getTotalPages())
-                .numberOfElements(content.size())
-                .content(content)
-                .build();
+        return buildPageVO(rootComments, currentUser.getId(), 0);
     }
 
     // ---------------- GET REPLIES ----------------
@@ -176,38 +154,11 @@ public class CommentServiceImpl implements CommentService {
         Comment parent = commentRepository.findById(parentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Parent comment not found"));
 
-        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User currentUser = userService.getCurrentUser();
         Page<Comment> replies = commentRepository.findByParent(parent, pageable);
 
-        List<CommentResponse> content = replies.stream()
-                .map(reply -> {
-                    CommentResponse dto = commentMapper.toDto(reply);
-                    dto.setParentId(parent.getId());
-
-                    // depth phụ thuộc vào tầng cha
-                    int depth = parent.getParent() == null ? 1 : 2;
-                    dto.setDepth(depth);
-
-                    // nếu là tầng 1 → có thể còn children
-                    if (depth == 1) {
-                        dto.setChildrenCount(commentRepository.countByParent(reply));
-                    }
-                    dto.setReactSummary(
-                            reactService.getReactSummary(reply.getId(), TargetType.COMMENT, currentUser.getId())
-                    );
-                    // nếu là tầng 2 → không đệ quy, FE hiển thị phẳng
-                    return dto;
-                })
-                .collect(Collectors.toList());
-
-        return PageVO.<CommentResponse>builder()
-                .page(replies.getNumber())
-                .size(replies.getSize())
-                .totalElements(replies.getTotalElements())
-                .totalPages(replies.getTotalPages())
-                .numberOfElements(content.size())
-                .content(content)
-                .build();
+        int depth = (parent.getParent() == null) ? 1 : 2;
+        return buildPageVO(replies, currentUser.getId(), depth);
     }
 
     // ---------------- DELETE ----------------
@@ -216,10 +167,12 @@ public class CommentServiceImpl implements CommentService {
     public void deleteComment(Long id) {
         Comment comment = commentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
-        User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
+
+        User current = userService.getCurrentUser();
         if (!comment.getAuthor().getId().equals(current.getId())) {
             throw new AccessDeniedException("You can only delete your own comment");
         }
+
         commentRepository.delete(comment);
         safeUpdateCommentCount(comment.getPost().getId(), -1);
     }
@@ -232,9 +185,73 @@ public class CommentServiceImpl implements CommentService {
                 postRepository.updateCommentCount(postId, delta);
                 return;
             } catch (OptimisticLockException e) {
-                if (i == 2) throw e; // thử tối đa 3 lần
+                if (i == 2) throw e;
             }
         }
+    }
+
+    // ---------------- PRIVATE HELPER METHODS ----------------
+
+    private PageVO<CommentResponse> buildPageVO(Page<Comment> page, Long viewerId, int depth) {
+        List<Comment> comments = page.getContent();
+        if (comments.isEmpty()) {
+            return PageVO.<CommentResponse>builder()
+                    .page(page.getNumber())
+                    .size(page.getSize())
+                    .totalElements(page.getTotalElements())
+                    .totalPages(page.getTotalPages())
+                    .numberOfElements(0)
+                    .content(List.of())
+                    .build();
+        }
+
+        List<Long> commentIds = comments.stream().map(Comment::getId).toList();
+
+        Map<Long, ReactSummaryDto> reactMap = reactService.getReactSummaries(commentIds, viewerId, TargetType.COMMENT);
+
+        Map<Long, Integer> childrenCountMap = (depth < 2)
+                ? commentRepository.findChildrenCounts(commentIds)
+                : Map.of();
+
+        List<CommentResponse> content = comments.stream()
+                .map(comment -> {
+                    CommentResponse dto = commentMapper.toDto(comment);
+                    dto.setReactSummary(reactMap.getOrDefault(
+                            comment.getId(),
+                            ReactSummaryDto.builder()
+                                    .counts(Collections.emptyMap())
+                                    .total(0L)
+                                    .currentUserReact(null)
+                                    .build())
+                    );
+                    dto.setChildrenCount(childrenCountMap.getOrDefault(comment.getId(), 0));
+                    dto.setDepth(depth);
+                    return dto;
+                })
+                .toList();
+
+        return PageVO.<CommentResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    private CommentResponse toDtoWithChildrenAndReacts(Comment comment, Long viewerId, int depth) {
+        CommentResponse dto = commentMapper.toDto(comment);
+
+        dto.setReactSummary(reactService.getReactSummary(comment.getId(), TargetType.COMMENT, viewerId));
+
+        dto.setChildrenCount(commentRepository.countByParent(comment));
+
+        if (depth >= 0) {
+            dto.setDepth(depth);
+        }
+
+        return dto;
     }
 
     private boolean isVideo(String ext) {

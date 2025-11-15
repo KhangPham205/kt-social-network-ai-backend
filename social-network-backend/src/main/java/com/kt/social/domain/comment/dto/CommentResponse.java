@@ -21,10 +21,10 @@ public class CommentResponse {
     private ReactSummaryDto reactSummary;
 
     private Long postId;
-    private Long parentId; // để biết là reply của ai
+    private Long parentId;
 
     private String content;
-    private List<Map<String, String>> media; // thay cho mediaUrl
+    private List<Map<String, String>> media;
 
     private Integer reactCount;
     private Integer childrenCount;
@@ -33,5 +33,4 @@ public class CommentResponse {
     private Instant updatedAt;
 
     private Integer depth;
-//    private List<CommentResponse> children; // phản hồi con
 }

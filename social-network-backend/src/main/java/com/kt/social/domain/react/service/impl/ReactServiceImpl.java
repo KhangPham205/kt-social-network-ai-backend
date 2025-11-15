@@ -33,8 +33,7 @@ public class ReactServiceImpl implements ReactService {
 
     @Override
     @Transactional
-    public ReactResponse toggleReact(Long userId, ReactRequest req) {
-        User user = userRepository.getReferenceById(userId);
+    public ReactResponse toggleReact(User user, ReactRequest req) {
         TargetType tType = req.getTargetType();
         Long targetId = req.getTargetId();
 
@@ -131,7 +130,7 @@ public class ReactServiceImpl implements ReactService {
 
     @Override
     public ReactSummaryDto getReactSummary(Long targetId, TargetType targetType, Long userId) {
-        // chỉ trả về name + count, không join User hay ReactType đầy đủ
+        // 1. Lấy counts (Query 1 - giữ nguyên logic của bạn)
         List<Object[]> summary = reactRepository.summarizeByTarget(targetId, targetType);
 
         Map<String, Long> counts = summary.stream()
@@ -140,14 +139,9 @@ public class ReactServiceImpl implements ReactService {
                         arr -> (Long) arr[1]         // COUNT(*)
                 ));
 
-        // Lấy react của user hiện tại (có thể cache sau)
+        // 2. 🔥 SỬA LẠI: Lấy react của user (Query 2 - Dùng query mới, hiệu quả hơn)
         String currentUserReact = reactRepository
-                .findByUserAndTargetIdAndTargetType(
-                        userRepository.getReferenceById(userId),
-                        targetId,
-                        targetType
-                )
-                .map(r -> r.getReactType().getName())
+                .findViewerReactNameForTarget(userId, targetId, targetType)
                 .orElse(null);
 
         return ReactSummaryDto.builder()
@@ -155,5 +149,46 @@ public class ReactServiceImpl implements ReactService {
                 .total(counts.values().stream().mapToLong(Long::longValue).sum())
                 .currentUserReact(currentUserReact)
                 .build();
+    }
+
+    @Override
+    public Map<Long, ReactSummaryDto> getReactSummaries(List<Long> targetIds, Long viewerId, TargetType targetType) {
+        if (targetIds == null || targetIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Map<String, Long>> allCountsMap = new HashMap<>();
+        List<Object[]> summaryResults = reactRepository.summarizeByTargetList(targetIds, targetType);
+
+        for (Object[] row : summaryResults) {
+            Long targetId = (Long) row[0];
+            String reactName = (String) row[1];
+            Long count = (Long) row[2];
+
+            allCountsMap.computeIfAbsent(targetId, k -> new HashMap<>()).put(reactName, count);
+        }
+
+        Map<Long, String> viewerReactsMap = reactRepository
+                .findViewerReactsForTargetList(viewerId, targetIds, targetType)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],  // targetId
+                        row -> (String) row[1] // reactName
+                ));
+
+        Map<Long, ReactSummaryDto> resultMap = new HashMap<>();
+        for (Long targetId : targetIds) {
+            Map<String, Long> counts = allCountsMap.getOrDefault(targetId, Map.of());
+            long total = counts.values().stream().mapToLong(Long::longValue).sum();
+            String currentUserReact = viewerReactsMap.get(targetId); // Sẽ là null nếu không react
+
+            resultMap.put(targetId, new ReactSummaryDto(
+                    counts,
+                    total,
+                    currentUserReact
+            ));
+        }
+
+        return resultMap;
     }
 }

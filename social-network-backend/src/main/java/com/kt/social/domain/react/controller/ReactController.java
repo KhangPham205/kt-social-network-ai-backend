@@ -22,8 +22,7 @@ public class ReactController {
 
     @PostMapping("/toggle")
     public ResponseEntity<ReactResponse> toggle(@RequestBody ReactRequest req) {
-        Long userId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(reactService.toggleReact(userId, req));
+        return ResponseEntity.ok(reactService.toggleReact(userService.getCurrentUser(), req));
     }
 
     @GetMapping("/{targetType}/{targetId}/users")

@@ -5,6 +5,7 @@ import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.service.UserService;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.security.Principal;
 
 @RestController
 @RequestMapping(ApiConstants.USERS)
@@ -36,8 +39,8 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<UserProfileDto> getMyProfile(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(userService.getProfileByUsername(userDetails.getUsername()));
+    public ResponseEntity<UserProfileDto> getMyProfile(@NonNull Principal principal) {
+        return ResponseEntity.ok(userService.getProfile(Long.parseLong(principal.getName())));
     }
 
     @PutMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -52,20 +55,17 @@ public class UserController {
 
     @PostMapping("/follow")
     public ResponseEntity<FollowResponse> follow(@RequestParam Long targetId) {
-        User currentUser = userService.getCurrentUser();
-        return ResponseEntity.ok(userService.followUser(currentUser.getId(), targetId));
+        return ResponseEntity.ok(userService.followUser(targetId));
     }
 
     @DeleteMapping("/unfollow")
     public ResponseEntity<FollowResponse> unfollow(@RequestParam Long targetId) {
-        User currentUser = userService.getCurrentUser();
-        return ResponseEntity.ok(userService.unfollowUser(currentUser.getId(), targetId));
+        return ResponseEntity.ok(userService.unfollowUser(targetId));
     }
 
     @DeleteMapping("/{followerId}/remove-follower")
     public ResponseEntity<FollowResponse> removeFollower(@PathVariable Long followerId) {
-        User currentUser = userService.getCurrentUser();
-        return ResponseEntity.ok(userService.removeFollower(currentUser.getId(), followerId));
+        return ResponseEntity.ok(userService.removeFollower(followerId));
     }
 
     @GetMapping("/{id}/followers")

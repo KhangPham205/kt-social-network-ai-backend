@@ -7,11 +7,16 @@ import com.kt.social.auth.repository.PermissionRepository;
 import com.kt.social.auth.repository.RoleRepository;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.enums.AccountStatus;
+import com.kt.social.domain.user.model.User;
+import com.kt.social.domain.user.model.UserInfo;
+import com.kt.social.domain.user.repository.UserInfoRepository;
+import com.kt.social.domain.user.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -24,6 +29,8 @@ public class DataInitializer {
     private final PermissionRepository permissionRepository;
     private final UserCredentialRepository userCredentialRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserRepository userRepository;
+    private final UserInfoRepository userInfoRepository;
 
     @Value("${admin.username}")
     private String adminUsername;
@@ -32,6 +39,7 @@ public class DataInitializer {
     private String adminPassword;
 
     @PostConstruct
+    @Transactional
     public void init() {
         System.out.println("Initializing default roles, permissions, and admin account...");
 
@@ -47,18 +55,39 @@ public class DataInitializer {
         assignPermissions(adminRole, Set.of(createPost, deletePost, comment));
         assignPermissions(moderatorRole, Set.of(createPost, deletePost, comment));
 
-        if (!userCredentialRepository.existsByUsername("admin")) {
-            UserCredential admin = UserCredential.builder()
+        if (!userCredentialRepository.existsByUsername(adminUsername)) {
+
+            // 1. Tạo Credential (Chưa save)
+            UserCredential adminCredential = UserCredential.builder()
                     .username(adminUsername)
                     .email("admin@social.local")
                     .password(passwordEncoder.encode(adminPassword))
-                    .role(adminRole)
                     .roles(Set.of(adminRole))
                     .status(AccountStatus.ACTIVE)
                     .build();
 
-            userCredentialRepository.save(admin);
-            System.out.println("✅ Default admin account created: " + adminUsername + " " + adminPassword);
+            // 2. Tạo User (Profile) (Chưa save)
+            User adminUser = User.builder()
+                    .displayName("Administrator")
+                    .isActive(true)
+                    // .credential(adminCredential) // Tạm thời chưa set
+                    .build();
+
+            // 3. Tạo UserInfo (Chưa save)
+            UserInfo adminInfo = UserInfo.builder()
+                    .bio("Tài khoản quản trị viên")
+                    // .user(adminUser) // Tạm thời chưa set
+                    .build();
+
+            adminCredential.setUser(adminUser);
+            adminUser.setCredential(adminCredential);
+
+            adminUser.setUserInfo(adminInfo);
+            adminInfo.setUser(adminUser);
+
+            userCredentialRepository.save(adminCredential);
+
+            System.out.println("✅ Default admin account (với profile) created: " + adminUsername);
         } else {
             System.out.println("ℹ️ Admin account already exists, skipping creation.");
         }

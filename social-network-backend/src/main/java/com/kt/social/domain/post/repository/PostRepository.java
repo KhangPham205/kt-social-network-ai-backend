@@ -12,26 +12,42 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Repository
 public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificationExecutor<Post> {
     Page<Post> findByAuthor(User author, Pageable pageable);
     List<Post> findBySharedPost(Post sharedPost);
 
-    @Query(value = """
-    SELECT * FROM posts p
-    WHERE p.media @> cast(:filterJson AS jsonb)
-    """, nativeQuery = true)
-    List<Post> findByMediaType(@Param("filterJson") String filterJson);
-
-    Page<Post> findAll(Specification<Post> spec, @NonNull Pageable pageable);
-
     @Query("SELECT COUNT(p) FROM Post p WHERE p.sharedPost.id = :postId")
     int countSharesByPostId(@Param("postId") Long postId);
 
     @Modifying
+    @Transactional
     @Query("UPDATE Post p SET p.commentCount = p.commentCount + :delta WHERE p.id = :postId")
     void updateCommentCount(@Param("postId") Long postId, @Param("delta") int delta);
+
+    @Query("""
+    SELECT p.sharedPost.id, COUNT(p.id)
+    FROM Post p
+    WHERE p.sharedPost.id IN :postIds
+    GROUP BY p.sharedPost.id
+""")
+    List<Object[]> findShareCountsRaw(@Param("postIds") List<Long> postIds);
+
+    // Hàm default để chuyển List<Object[]> thành Map
+    default Map<Long, Integer> findShareCounts(List<Long> postIds) {
+        if (postIds == null || postIds.isEmpty()) {
+            return Map.of();
+        }
+        return findShareCountsRaw(postIds).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> ((Number) row[1]).intValue()
+                ));
+    }
 }

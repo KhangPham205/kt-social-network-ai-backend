@@ -4,6 +4,7 @@ import com.kt.social.auth.dto.RefreshTokenRequest;
 import com.kt.social.auth.dto.LoginResponse;
 import com.kt.social.auth.dto.TokenResponse;
 import com.kt.social.auth.model.RefreshToken;
+import com.kt.social.auth.model.Role;
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.RefreshTokenRepository;
 import com.kt.social.auth.security.JwtProvider;
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -48,15 +50,30 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             throw new BadRequestException("Invalid or expired code");
         }
 
-        var user = token.getUser();
+        var userCredential = token.getUser();
+
+        Set<Role> roles = userCredential.getRoles();
+        String[] roleNames = roles.stream()
+                .map(Role::getName)
+                .toArray(String[]::new);
 
         UserDetails userDetails = User.builder()
-                .username(user.getUsername())
-                .password(user.getPassword())
-                .roles(user.getRole().getName())
+                .username(userCredential.getUsername())
+                .password(userCredential.getPassword())
+                .roles(roleNames)
                 .build();
 
-        String newAccessToken = jwtProvider.generateToken(userDetails, user.getId());
+        com.kt.social.domain.user.model.User userProfile = userCredential.getUser();
+
+        // 2. Kiểm tra
+        if (userProfile == null) {
+            throw new IllegalStateException("Tài khoản " + userCredential.getUsername() + " không có User profile liên kết.");
+        }
+
+        Long realUserId = userProfile.getId();
+
+        String newAccessToken = jwtProvider.generateToken(userDetails, realUserId);
+
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(refreshToken)

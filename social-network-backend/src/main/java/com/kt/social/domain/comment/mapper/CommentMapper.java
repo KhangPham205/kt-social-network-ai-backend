@@ -14,5 +14,7 @@ public interface CommentMapper {
     @Mapping(source = "author.avatarUrl", target = "authorAvatar")
     @Mapping(source = "post.id", target = "postId")
     @Mapping(source = "parent.id", target = "parentId")
+    @Mapping(target = "reactSummary", ignore = true)
+    @Mapping(target = "childrenCount", ignore = true)
     CommentResponse toDto(Comment comment);
 }

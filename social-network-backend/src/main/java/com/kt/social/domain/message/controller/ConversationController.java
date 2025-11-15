@@ -8,6 +8,8 @@ import com.kt.social.domain.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
@@ -25,7 +27,7 @@ public class ConversationController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<List<Map<String,Object>>> myConversations() {
+    public ResponseEntity<List<Map<String,Object>>> myConversations(Principal principal) {
         Long userId = userService.getCurrentUser().getId();
         return ResponseEntity.ok(conversationService.getUserConversations(userId));
     }

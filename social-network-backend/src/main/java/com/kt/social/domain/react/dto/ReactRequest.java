@@ -9,6 +9,6 @@ import lombok.*;
 @Builder
 public class ReactRequest {
     private Long targetId;
-    private TargetType targetType; // "POST"
-    private Long reactTypeId;  // requested react type
+    private TargetType targetType; // "POST", "COMMENT", etc.
+    private Long reactTypeId;
 }

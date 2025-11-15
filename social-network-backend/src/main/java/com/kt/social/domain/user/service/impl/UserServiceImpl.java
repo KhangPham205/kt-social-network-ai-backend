@@ -10,6 +10,7 @@ import com.kt.social.common.service.BaseFilterService;
 import com.kt.social.common.utils.BlockUtils;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
+import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.mapper.UserMapper;
@@ -27,6 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -46,7 +51,7 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         if (auth == null || auth.getName() == null)
             throw new ResourceNotFoundException("Authentication missing");
 
-        Long userId;
+        long userId;
         try {
             userId = Long.parseLong(auth.getName());
         } catch (NumberFormatException e) {
@@ -72,17 +77,14 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Override
     @Transactional
     public UserProfileDto updateProfile(UpdateUserProfileRequest request) {
-        var credential = SecurityUtils.getCurrentUserCredential(userCredentialRepository)
-                .orElseThrow(() -> new BadRequestException("User not authenticated"));
-
-        User user = userRepository.findById(credential.getUser().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        User user = getCurrentUser();
 
         // cập nhật thông tin text
-        if (request.getDisplayName() != null) user.setDisplayName(request.getDisplayName());
-        if (request.getBio() != null && user.getUserInfo() != null)
+        if (request.getDisplayName() != null && !request.getDisplayName().isEmpty())
+            user.setDisplayName(request.getDisplayName());
+        if (request.getBio() != null && !request.getBio().isEmpty() && user.getUserInfo() != null)
             user.getUserInfo().setBio(request.getBio());
-        if (request.getFavorites() != null && user.getUserInfo() != null)
+        if (request.getFavorites() != null && !request.getFavorites().isEmpty() && user.getUserInfo() != null)
             user.getUserInfo().setFavorites(request.getFavorites());
         if (request.getDateOfBirth() != null && user.getUserInfo() != null)
             user.getUserInfo().setDateOfBirth(request.getDateOfBirth());
@@ -104,12 +106,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     }
 
     @Override
-    public FollowResponse followUser(Long userId, Long targetId) {
+    public FollowResponse followUser(Long targetId) {
+        User follower = getCurrentUser();
+        Long userId = follower.getId();
+
         if (userId.equals(targetId))
             throw new BadRequestException("You cannot follow yourself");
 
-        User follower = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         User following = userRepository.findById(targetId)
                 .orElseThrow(() -> new ResourceNotFoundException("Target user not found"));
 
@@ -129,13 +132,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
     @Override
     @Transactional
-    public FollowResponse unfollowUser(Long userId, Long targetId) {
+    public FollowResponse unfollowUser(Long targetId) {
+        User follower = getCurrentUser();
+        Long userId = follower.getId();
+
         if (userId.equals(targetId)) {
             throw new BadRequestException("You cannot unfollow yourself");
         }
-
-        User follower = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         User following = userRepository.findById(targetId)
                 .orElseThrow(() -> new ResourceNotFoundException("Target user not found"));
 
@@ -150,9 +153,8 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
     @Override
     @Transactional
-    public FollowResponse removeFollower(Long currentUserId, Long followerId) {
-        User current = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    public FollowResponse removeFollower(Long followerId) {
+        User current = getCurrentUser();
         User follower = userRepository.findById(followerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Follower not found"));
 
@@ -163,26 +165,10 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         return new FollowResponse("Removed follower successfully", false);
     }
 
-    @Override
-    public UserProfileDto getProfileByUsername(String username) {
-        UserCredential cred = userCredentialRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Credential not found"));
-        User user = userRepository.findByCredential(cred);
-        if (user == null) {
-            throw new ResourceNotFoundException("Not found profile for user: " + username);
-        }
-
-        return userMapper.toDto(user);
-    }
-
     @Transactional
     @Override
     public UserProfileDto updateAvatar(MultipartFile avatarFile) {
-        var credential = SecurityUtils.getCurrentUserCredential(userCredentialRepository)
-                .orElseThrow(() -> new BadRequestException("User not authenticated"));
-
-        User user = userRepository.findById(credential.getUser().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        User user = getCurrentUser();
 
         // Xóa ảnh cũ (nếu có)
         if (user.getAvatarUrl() != null) {
@@ -210,15 +196,15 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Override
     @Transactional(readOnly = true)
     public PageVO<UserRelationDto> searchUsers(String filter, Pageable pageable) {
-        var currentUser = getCurrentUser();
+        var viewer = getCurrentUser();
 
-        var blockedByMe = blockUtils.getAllBlockedIds(currentUser.getId());
-        var blockedMe = friendshipRepository.findBlockedUserIdsByTarget(currentUser.getId());
+        var blockedByMe = blockUtils.getAllBlockedIds(viewer.getId());
+        var blockedMe = friendshipRepository.findBlockedUserIdsByTarget(viewer.getId());
         var totalBlocked = new HashSet<>(blockedByMe);
         totalBlocked.addAll(blockedMe);
 
         Specification<User> combinedSpec = (root1, query1, cb1) -> cb1.and(
-                cb1.notEqual(root1.get("id"), currentUser.getId()),
+                cb1.notEqual(root1.get("id"), viewer.getId()),
                 cb1.isTrue(root1.get("isActive")),
                 totalBlocked.isEmpty() ? cb1.conjunction() : cb1.not(root1.get("id").in(totalBlocked))
         );
@@ -239,9 +225,14 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         }
 
         Page<User> page = userRepository.findAll(combinedSpec, pageable);
+        List<User> targets = page.getContent();
 
-        var content = page.getContent().stream()
-                .map(u -> mapToRelationDto(currentUser, u))
+        // 4. Lấy dữ liệu quan hệ (N+1 FIX)
+        Map<Long, UserRelationDto> relationDtos = mapPageToRelationDtos(viewer, targets);
+
+        // 5. Map lại theo đúng thứ tự
+        var content = targets.stream()
+                .map(u -> relationDtos.get(u.getId()))
                 .toList();
 
         return PageVO.<UserRelationDto>builder()
@@ -255,7 +246,6 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     }
 
     // ---------------------- Follow/Unfollow ----------------------
-
     @Override
     @Transactional
     public PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable) {
@@ -266,18 +256,24 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         var blockedIds = blockUtils.getAllBlockedIds(viewer.getId());
         blockedIds.addAll(friendshipRepository.findBlockedUserIdsByTarget(viewer.getId()));
 
-        var followers = userRelaRepository.findByFollowing(target, pageable);
-        var content = followers.getContent().stream()
+        var followersPage = userRelaRepository.findByFollowing(target, pageable);
+
+        List<User> followers = followersPage.getContent().stream()
                 .map(UserRela::getFollower)
                 .filter(u -> !blockedIds.contains(u.getId()))
-                .map(user -> mapToRelationDto(viewer, user))
+                .toList();
+
+        Map<Long, UserRelationDto> relationDtos = mapPageToRelationDtos(viewer, followers);
+
+        var content = followers.stream()
+                .map(u -> relationDtos.get(u.getId()))
                 .toList();
 
         return PageVO.<UserRelationDto>builder()
-                .page(followers.getNumber())
-                .size(followers.getSize())
-                .totalElements(followers.getTotalElements())
-                .totalPages(followers.getTotalPages())
+                .page(followersPage.getNumber())
+                .size(followersPage.getSize())
+                .totalElements(followersPage.getTotalElements())
+                .totalPages(followersPage.getTotalPages())
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
@@ -293,25 +289,88 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         var blockedIds = blockUtils.getAllBlockedIds(viewer.getId());
         blockedIds.addAll(friendshipRepository.findBlockedUserIdsByTarget(viewer.getId()));
 
-        var following = userRelaRepository.findByFollowing(target, pageable);
-        var content = following.getContent().stream()
-                .map(UserRela::getFollower)
+        var followingPaged = userRelaRepository.findByFollower(target, pageable);
+
+        List<User> following = followingPaged.getContent().stream()
+                .map(UserRela::getFollowing)
                 .filter(u -> !blockedIds.contains(u.getId()))
-                .map(user -> mapToRelationDto(viewer, user))
                 .toList();
 
+        Map<Long, UserRelationDto> relationDtos = mapPageToRelationDtos(viewer, following);
+
+        var content = following.stream()
+                .map(u -> relationDtos.get(u.getId()))
+                .toList();
 
         return PageVO.<UserRelationDto>builder()
-                .page(following.getNumber())
-                .size(following.getSize())
-                .totalElements(following.getTotalElements())
-                .totalPages(following.getTotalPages())
+                .page(followingPaged.getNumber())
+                .size(followingPaged.getSize())
+                .totalElements(followingPaged.getTotalElements())
+                .totalPages(followingPaged.getTotalPages())
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
     }
 
     // ========== Hàm tiện ích chuyển đổi User → UserRelationDto ==========
+    private Map<Long, UserRelationDto> mapPageToRelationDtos(User viewer, List<User> targets) {
+        if (targets.isEmpty()) {
+            return Map.of();
+        }
+
+        // Lấy danh sách ID của các user mục tiêu
+        Set<Long> targetIds = targets.stream().map(User::getId).collect(Collectors.toSet());
+        Long viewerId = viewer.getId();
+
+        // Query 2: Lấy trạng thái following (Viewer đang follow ai trong list?)
+        Set<Long> followingIds = userRelaRepository.findFollowingIds(viewerId, targetIds);
+
+        // Query 3: Lấy trạng thái followed by (Ai trong list đang follow Viewer?)
+        Set<Long> followedByIds = userRelaRepository.findFollowerIds(viewerId, targetIds);
+
+        // Query 4: Lấy trạng thái bạn bè
+        Map<Long, FriendshipResponse> friendshipMap = friendshipRepository
+                .findFriendshipsBetween(viewerId, targetIds)
+                .stream()
+                .map(f -> FriendshipResponse.from(f, viewerId)) // Cần 1 helper 'from'
+                .collect(Collectors.toMap(
+                        fr -> fr.getReceiverId().equals(viewerId) ? fr.getSenderId() : fr.getReceiverId(),
+                        fr -> fr
+                ));
+
+        // Bây giờ map trong bộ nhớ (cực nhanh, không tốn query)
+        return targets.stream().map(target -> {
+            Long targetId = target.getId();
+
+            boolean isFollowing = followingIds.contains(targetId);
+            boolean isFollowedBy = followedByIds.contains(targetId);
+
+            // Lấy friendship, hoặc tạo rỗng nếu không có
+            FriendshipResponse friendship = friendshipMap.getOrDefault(targetId,
+                    FriendshipResponse.builder()
+                            .senderId(viewerId)
+                            .receiverId(targetId)
+                            .status(FriendshipStatus.NONE) // Cần enum 'NONE'
+                            .build()
+            );
+
+            UserProfileDto base = userMapper.toDto(target);
+
+            return UserRelationDto.builder()
+                    .id(base.getId())
+                    .displayName(base.getDisplayName())
+                    .avatarUrl(base.getAvatarUrl())
+                    .isActive(base.getIsActive())
+                    .bio(base.getBio())
+                    .favorites(base.getFavorites())
+                    .dateOfBirth(base.getDateOfBirth())
+                    .isFollowing(isFollowing)
+                    .isFollowedBy(isFollowedBy)
+                    .friendship(friendship)
+                    .build();
+        }).collect(Collectors.toMap(UserRelationDto::getId, dto -> dto));
+    }
+
     private UserRelationDto mapToRelationDto(User viewer, User target) {
         boolean isFollowing = userRelaRepository.existsByFollowerAndFollowing(viewer, target);
         boolean isFollowedBy = userRelaRepository.existsByFollowerAndFollowing(target, viewer);

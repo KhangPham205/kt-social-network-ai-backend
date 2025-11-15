@@ -5,15 +5,21 @@ import jakarta.persistence.*;
 import lombok.*;
 import com.kt.social.common.entity.BaseEntity;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
-@EqualsAndHashCode(callSuper = true)
+import java.time.Instant;
+
 @Entity
 @Table(name = "users")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @SuperBuilder
-public class User extends BaseEntity {
+public class User {
+
+    @Id
+    private Long id;
 
     @Column(nullable = false)
     private String displayName;
@@ -24,13 +30,17 @@ public class User extends BaseEntity {
 
     private Boolean isActive = true;
 
-    @Column(nullable = false)
-    private Boolean isOnline = false;
-
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private UserInfo userInfo;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    @JoinColumn(name = "credential_id", referencedColumnName = "id")
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @MapsId
+    @JoinColumn(name = "id")
     private UserCredential credential;
+
+    @CreationTimestamp
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    private Instant updatedAt;
 }

@@ -33,9 +33,9 @@ public class  UserCredential {
 //    @Column(unique = true)
 //    private String phone;
 
-    @ManyToOne
-    @JoinColumn(name = "role_id", nullable = false)
-    private Role role;
+//    @ManyToOne
+//    @JoinColumn(name = "role_id", nullable = false)
+//    private Role role;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

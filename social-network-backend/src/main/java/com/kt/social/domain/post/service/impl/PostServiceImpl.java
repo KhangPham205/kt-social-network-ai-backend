@@ -16,6 +16,7 @@ import com.kt.social.domain.post.mapper.PostMapper;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.post.service.PostService;
+import com.kt.social.domain.react.dto.ReactSummaryDto;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
@@ -36,6 +37,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
@@ -43,7 +46,6 @@ import java.util.stream.Stream;
 public class PostServiceImpl implements PostService {
 
     private final UserRelaRepository userRelaRepository;
-    private final UserCredentialRepository credRepo;
     private final FriendshipRepository friendshipRepository;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
@@ -55,7 +57,7 @@ public class PostServiceImpl implements PostService {
     @Override
     @Transactional
     public PostResponse create(String content, String accessModifier, List<MultipartFile> mediaFiles) {
-        User author = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User author = userService.getCurrentUser();
 
         List<Map<String, String>> mediaList = List.of();
         if (mediaFiles != null && !mediaFiles.isEmpty()) {
@@ -78,14 +80,16 @@ public class PostServiceImpl implements PostService {
                 .build();
 
         postRepository.save(post);
-        return postMapper.toDto(post);
-    }
+        PostResponse dto = postMapper.toDto(post);
+        dto.setReactSummary(ReactSummaryDto.builder().build());
+        dto.setShareCount(0);
+        return dto;    }
 
     @Override
     @Transactional
     public PostResponse update(UpdatePostRequest request) {
 
-        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User currentUser = userService.getCurrentUser();
         Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
@@ -128,50 +132,48 @@ public class PostServiceImpl implements PostService {
         post.setUpdatedAt(Instant.now());
         postRepository.save(post);
 
-        return postMapper.toDto(post);
+        return toDtoWithReactsAndShares(post, currentUser.getId());
     }
 
     @Override
     @Transactional(readOnly = true)
     public PostResponse getPostById(Long postId) {
-        User viewer = SecurityUtils.getCurrentUser(credRepo, userRepository);
-
+        User viewer = userService.getCurrentUser();
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found with id: " + postId));
 
-        User author = post.getAuthor();
+        checkViewPermission(viewer, post);
 
-        switch (post.getAccessModifier()) {
-            case PRIVATE -> {
-                // Chỉ tác giả mới xem được
-                if (!viewer.getId().equals(author.getId())) {
-                    throw new AccessDeniedException("You don't have permission to view this private post");
-                }
-            }
-            case FRIENDS -> {
-                boolean areFriends = friendshipRepository.existsBySenderAndReceiverAndStatus(author, viewer, FriendshipStatus.FRIEND)
-                        || friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, author, FriendshipStatus.FRIEND);
-
-                if (!areFriends && !viewer.getId().equals(author.getId())) {
-                    throw new AccessDeniedException("Only friends can view this post");
-                }
-            }
-            case PUBLIC -> {
-                // Ai cũng xem được
-            }
-        }
-
-        return toResponseWithAccessCheck(viewer, post);
+        return toDtoWithReactsAndShares(post, viewer.getId());
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageVO<PostResponse> getUserPosts(Long userId, Pageable pageable) {
-        User viewer = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User viewer = userService.getCurrentUser(); // <-- SỬA
         User targetUser = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        Page<Post> page = postRepository.findByAuthor(targetUser, pageable);
+        Specification<Post> spec = (root, query, cb) -> {
+            Predicate authorMatch = cb.equal(root.get("author"), targetUser);
+
+            if (viewer.getId().equals(targetUser.getId())) {
+                return authorMatch;
+            }
+
+            boolean areFriends = friendshipRepository.existsActiveFriendship(viewer, targetUser);
+
+            Predicate publicPosts = cb.equal(root.get("accessModifier"), AccessScope.PUBLIC);
+
+            if (areFriends) {
+                Predicate friendPosts = cb.equal(root.get("accessModifier"), AccessScope.FRIENDS);
+                return cb.and(authorMatch, cb.or(publicPosts, friendPosts));
+            }
+
+            return cb.and(authorMatch, publicPosts);
+        };
+
+        Page<Post> page = postRepository.findAll(spec, pageable);
 
         return getPostResponsePageVO(viewer, page);
     }
@@ -179,33 +181,21 @@ public class PostServiceImpl implements PostService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<PostResponse> getMyPosts(Pageable pageable) {
-        User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
-        Page<Post> page = postRepository.findByAuthor(current, pageable);
-
-        return getPostResponsePageVO(current, page);
+        User current = userService.getCurrentUser();
+        return getUserPosts(current.getId(), pageable);
     }
 
     @Override
     @Transactional
     public PostResponse sharePost(Long originalPostId, String caption, AccessScope accessScope) {
-        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User currentUser = userService.getCurrentUser(); // <-- SỬA
         Post original = postRepository.findById(originalPostId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
-        // Kiểm tra quyền share
-        switch (original.getAccessModifier()) {
-            case PRIVATE -> throw new BadRequestException("This post is private and cannot be shared.");
-            case FRIENDS -> {
-                boolean areFriends = friendshipRepository.existsByUserAndFriendAndStatusApproved(
-                        currentUser, original.getAuthor()
-                ) || friendshipRepository.existsByUserAndFriendAndStatusApproved(
-                        original.getAuthor(), currentUser
-                );
-                if (!areFriends) {
-                    throw new BadRequestException("You must be friends with the author to share this post.");
-                }
-            }
-            default -> {} // PUBLIC => được phép
+        checkViewPermission(currentUser, original);
+
+        if (original.getAccessModifier() == AccessScope.PRIVATE) {
+            throw new BadRequestException("This post is private and cannot be shared.");
         }
 
         Post shared = Post.builder()
@@ -213,16 +203,17 @@ public class PostServiceImpl implements PostService {
                 .content(caption)
                 .sharedPost(original)
                 .accessModifier(accessScope)
+                .createdAt(Instant.now())
                 .build();
 
         postRepository.save(shared);
-        return postMapper.toDto(shared);
+        return toDtoWithReactsAndShares(shared, currentUser.getId());
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageVO<PostResponse> getFeed(Pageable pageable, String filter) {
-        User current = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User current = userService.getCurrentUser();
 
         var friends = friendshipRepository.findAllAcceptedFriends(current);
         var friendAndSelfIds = Stream.concat(
@@ -247,24 +238,19 @@ public class PostServiceImpl implements PostService {
 
         Specification<Post> baseSpec = (root, query, cb) -> {
             query.distinct(true);
-
             Predicate authorPredicate = root.get("author").get("id").in(authorIds);
             Predicate publicPosts = cb.equal(root.get("accessModifier"), AccessScope.PUBLIC);
-
             Predicate friendPosts = cb.and(
                     cb.equal(root.get("accessModifier"), AccessScope.FRIENDS),
                     root.get("author").get("id").in(friendAndSelfIds)
             );
-
             Predicate privatePosts = cb.and(
                     cb.equal(root.get("accessModifier"), AccessScope.PRIVATE),
                     cb.equal(root.get("author"), current)
             );
-
             Predicate accessPredicate = cb.or(publicPosts, friendPosts, privatePosts);
             return cb.and(authorPredicate, accessPredicate);
         };
-
         Specification<Post> finalSpec = baseSpec;
         if (filter != null && !filter.isBlank()) {
             finalSpec = finalSpec.and(RSQLJPASupport.toSpecification(filter));
@@ -278,7 +264,7 @@ public class PostServiceImpl implements PostService {
     @Override
     @Transactional
     public void deletePost(Long postId) {
-        User currentUser = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User currentUser = userService.getCurrentUser();
 
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
@@ -297,16 +283,128 @@ public class PostServiceImpl implements PostService {
 
     // --------------------- Helper methods -------------------------
 
-    public boolean canViewSharedPost(User viewer, Post original) {
-        if (original == null) return false;
-        if (viewer.getId().equals(original.getAuthor().getId())) return true;
+    @Transactional(readOnly = true)
+    protected PageVO<PostResponse> getPostResponsePageVO(User viewer, Page<Post> page) {
+        List<Post> posts = page.getContent();
+        if (posts.isEmpty()) {
+            return PageVO.emptyPage(page); // Trả về trang rỗng
+        }
 
-        return switch (original.getAccessModifier()) {
-            case PUBLIC -> true;
-            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, original.getAuthor(), FriendshipStatus.FRIEND)
-                    || friendshipRepository.existsBySenderAndReceiverAndStatus(original.getAuthor(), viewer, FriendshipStatus.FRIEND);
-            default -> false;
-        };
+        // --- BATCH FETCH (LẤY HÀNG LOẠT) ---
+
+        // 1. Lấy ID
+        List<Long> postIds = posts.stream().map(Post::getId).toList();
+        Long viewerId = viewer.getId();
+
+        // 2. Lấy Reacts (Query 2)
+        // (Yêu cầu ReactService có hàm getReactSummaries(List<Long>, Long))
+        Map<Long, ReactSummaryDto> reactMap = reactService.getReactSummaries(postIds, viewerId, TargetType.POST);
+
+        // 3. Lấy Share Counts (Query 3)
+        // (Yêu cầu PostRepository có hàm findShareCounts(List<Long>))
+        Map<Long, Integer> shareCountMap = postRepository.findShareCounts(postIds);
+
+        // 4. Lấy Shared Posts (Query 4)
+        List<Post> sharedPosts = posts.stream()
+                .map(Post::getSharedPost)
+                .filter(Objects::nonNull)
+                .toList();
+        Map<Long, Post> sharedPostMap = sharedPosts.stream()
+                .collect(Collectors.toMap(Post::getId, Function.identity(), (a, b) -> a)); // (Map<SharedPostId, SharedPost>)
+
+        // 5. Kiểm tra quyền xem trên các shared post (in-memory)
+        // Map<SharedPostId, PostResponseDto>
+        Map<Long, PostResponse> visibleSharedPostDtoMap = sharedPosts.stream()
+                .filter(sp -> canViewPost(viewer, sp)) // Chỉ giữ lại post xem được
+                .map(sp -> toDtoWithReactsAndShares(sp, viewerId)) // Map post xem được
+                .collect(Collectors.toMap(PostResponse::getId, Function.identity()));
+
+        // --- KẾT THÚC BATCH FETCH ---
+
+        // 6. Ánh xạ (Map) trong bộ nhớ (cực nhanh)
+        List<PostResponse> visiblePosts = posts.stream()
+                .map(post -> {
+                    PostResponse dto = postMapper.toDto(post);
+
+                    // Gán React
+                    dto.setReactSummary(reactMap.getOrDefault(
+                            post.getId(),
+                            ReactSummaryDto.builder()
+                                    .counts(Collections.emptyMap())
+                                    .total(0L)
+                                    .currentUserReact(null)
+                                    .build()
+                            )
+                    );
+
+                    // Gán Share count
+                    dto.setShareCount(shareCountMap.getOrDefault(post.getId(), 0));
+
+                    // Gán Shared Post DTO (nếu xem được)
+                    if (post.getSharedPost() != null) {
+                        dto.setSharedPost(
+                                visibleSharedPostDtoMap.get(post.getSharedPost().getId()) // Trả về DTO hoặc null
+                        );
+                    }
+
+                    return dto;
+                })
+                .toList();
+
+        // Trả về PageVO
+        return PageVO.<PostResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(visiblePosts.size())
+                .content(visiblePosts)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    protected PostResponse toDtoWithReactsAndShares(Post post, Long viewerId) {
+        PostResponse dto = postMapper.toDto(post);
+
+        // 1. Gán Reacts (Query 1)
+        dto.setReactSummary(reactService.getReactSummary(post.getId(), TargetType.POST, viewerId));
+
+        // 2. Gán Share Count (Query 2)
+        dto.setShareCount(postRepository.countSharesByPostId(post.getId()));
+
+        // 3. Gán Shared Post (Query 3 - nếu có)
+        if (post.getSharedPost() != null) {
+            Post sharedPost = post.getSharedPost();
+            if (canViewPost(userRepository.findById(viewerId).get(), sharedPost)) {
+                // Đệ quy: Lấy DTO của bài share (cũng có react/share)
+                dto.setSharedPost(toDtoWithReactsAndShares(sharedPost, viewerId));
+            } else {
+                dto.setSharedPost(null); // Không có quyền xem
+            }
+        }
+
+        return dto;
+    }
+
+    private void checkViewPermission(User viewer, Post post) {
+        User author = post.getAuthor();
+        if (viewer.getId().equals(author.getId())) {
+            return; // Tác giả luôn xem được
+        }
+
+        switch (post.getAccessModifier()) {
+            case PRIVATE:
+                throw new AccessDeniedException("You don't have permission to view this private post");
+
+            case FRIENDS:
+                if (!friendshipRepository.existsActiveFriendship(author, viewer)) {
+                    throw new AccessDeniedException("Only friends can view this post");
+                }
+                break; // Là bạn, được xem
+
+            case PUBLIC:
+                break; // Ai cũng được xem
+        }
     }
 
     private boolean canViewPost(User viewer, Post post) {
@@ -316,53 +414,9 @@ public class PostServiceImpl implements PostService {
 
         return switch (post.getAccessModifier()) {
             case PUBLIC -> true;
-            case FRIENDS -> friendshipRepository.existsBySenderAndReceiverAndStatus(viewer, author, FriendshipStatus.FRIEND)
-                    || friendshipRepository.existsBySenderAndReceiverAndStatus(author, viewer, FriendshipStatus.FRIEND);
+            case FRIENDS -> friendshipRepository.existsActiveFriendship(author, viewer);
             case PRIVATE -> false;
         };
-    }
-
-    @Transactional(readOnly = true)
-    public Optional<Post> getVisibleSharedPost(User viewer, Post sharedPost) {
-        if (sharedPost == null || sharedPost.getId() == null) return Optional.empty();
-        return canViewSharedPost(viewer, sharedPost) ? Optional.of(sharedPost) : Optional.empty();
-    }
-
-    @Transactional(readOnly = true)
-    protected PostResponse toResponseWithAccessCheck(User viewer, Post post) {
-        PostResponse dto = postMapper.toDto(post);
-
-        if (post.getSharedPost() != null) {
-            Optional<Post> visible = getVisibleSharedPost(viewer, post.getSharedPost());
-            dto.setSharedPost(visible.map(postMapper::toDto).orElse(null));
-        } else {
-            dto.setSharedPost(null);
-        }
-
-        Long currentUserId = viewer.getId();
-        dto.setReactSummary(reactService.getReactSummary(post.getId(), TargetType.POST, currentUserId));
-
-        int shareCount = postRepository.countSharesByPostId(post.getId());
-        dto.setShareCount(shareCount);
-
-        return dto;
-    }
-
-    @Transactional
-    protected PageVO<PostResponse> getPostResponsePageVO(User current, Page<Post> page) {
-        List<PostResponse> visiblePosts = page.stream()
-                .map(post -> toResponseWithAccessCheck(current, post))
-                .filter(Objects::nonNull)
-                .toList();
-
-        return PageVO.<PostResponse>builder()
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .numberOfElements(visiblePosts.size())
-                .content(visiblePosts)
-                .build();
     }
 
     private boolean isVideo(String ext) {
