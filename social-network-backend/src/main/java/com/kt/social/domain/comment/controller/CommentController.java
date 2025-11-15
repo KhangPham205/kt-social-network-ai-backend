@@ -1,5 +1,6 @@
 package com.kt.social.domain.comment.controller;
 
+import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.comment.dto.CommentRequest;
 import com.kt.social.domain.comment.dto.CommentResponse;
@@ -13,7 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/comments")
+@RequestMapping(ApiConstants.COMMENTS)
 @RequiredArgsConstructor
 public class CommentController {
 

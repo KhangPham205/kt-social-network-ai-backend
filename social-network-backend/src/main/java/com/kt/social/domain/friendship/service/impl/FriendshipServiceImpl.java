@@ -109,12 +109,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
             userRelaRepository.save(UserRela.builder().follower(receiver).following(sender).build());
 
         // Tạo conversation giữa 2 người khi là bạn bè
-        ConversationCreateRequest convoReq = new ConversationCreateRequest();
-        convoReq.setIsGroup(false);
-        convoReq.setTitle(null);
-        convoReq.setMemberIds(List.of(senderId, receiverId));
-
-        conversationService.createConversation(convoReq);
+        conversationService.findOrCreateDirectConversation(senderId, receiverId);
 
         return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }

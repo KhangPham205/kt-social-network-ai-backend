@@ -1,5 +1,6 @@
 package com.kt.social.domain.post.controller;
 
+import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.post.dto.PostResponse;
 import com.kt.social.domain.post.dto.UpdatePostRequest;
@@ -19,7 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/posts")
+@RequestMapping(ApiConstants.POSTS)
 @RequiredArgsConstructor
 public class PostController {
 

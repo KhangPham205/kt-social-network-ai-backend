@@ -6,6 +6,7 @@ import com.kt.social.auth.repository.RefreshTokenRepository;
 import com.kt.social.auth.service.AuthService;
 import com.kt.social.auth.service.PasswordResetService;
 import com.kt.social.auth.service.RefreshTokenService;
+import com.kt.social.common.constants.ApiConstants;
 import io.swagger.v3.oas.models.OpenAPI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +18,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping(ApiConstants.AUTH)
 @RequiredArgsConstructor
 public class AuthController {
 

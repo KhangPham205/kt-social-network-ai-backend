@@ -1,5 +1,6 @@
 package com.kt.social.domain.user.controller;
 
+import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.model.User;
@@ -15,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/v1/users")
+@RequestMapping(ApiConstants.USERS)
 @RequiredArgsConstructor
 public class UserController {
 

@@ -1,128 +1,209 @@
+// MessageServiceImpl.java
 package com.kt.social.domain.message.service.impl;
 
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.util.SecurityUtils;
-import com.kt.social.common.exception.ResourceNotFoundException;
+import com.kt.social.common.constants.WebSocketConstants;
+import com.kt.social.common.vo.CursorPage;
 import com.kt.social.domain.message.dto.MessageRequest;
+import com.kt.social.domain.message.dto.MessageResponse;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
-import com.kt.social.domain.message.service.MessageService;
+import com.kt.social.domain.message.repository.ConversationMemberRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
+import com.kt.social.domain.message.service.MessageService;
 import com.kt.social.infra.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class MessageServiceImpl implements MessageService {
 
     private final ConversationRepository conversationRepository;
+    private final ConversationMemberRepository memberRepository;
     private final StorageService storageService;
     private final UserRepository userRepository;
     private final UserCredentialRepository credRepo;
     private final SimpMessagingTemplate messagingTemplate;
 
-    /**
-     * Gửi tin nhắn từ HTTP (có file)
-     */
+    // lightweight lock per conversation to avoid concurrent list corruption
+    private final Map<Long, Object> convoLocks = new ConcurrentHashMap<>();
+
+    private Object getLock(Long convoId) {
+        return convoLocks.computeIfAbsent(convoId, id -> new Object());
+    }
+
     @Override
     @Transactional
     public Map<String, Object> sendMessage(MessageRequest req) {
         User sender = SecurityUtils.getCurrentUser(credRepo, userRepository);
-
-        // Tạo tin nhắn (logic của bạn đã có)
-        Map<String, Object> messageMap = createMessage(sender, req.getConversationId(), req.getContent(), req.getReplyToId(), req.getMediaFiles());
-
-        // Phát tin nhắn tới kênh STOMP
-        broadcastMessage(req.getConversationId(), messageMap);
-
-        return messageMap;
+        return createAndSaveMessage(sender.getId(), sender.getDisplayName(), sender.getAvatarUrl(),
+                req.getConversationId(), req.getContent(), req.getReplyToId(), req.getMediaFiles());
     }
 
-    /**
-     * Gửi tin nhắn từ WebSocket (chỉ text)
-     * (Đây là phương thức mới được gọi bởi ChatStompController)
-     */
     @Override
     @Transactional
     public void sendMessageAs(Long senderId, MessageRequest req) {
         User sender = userRepository.findById(senderId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        // Tạo tin nhắn (không có file media)
-        Map<String, Object> messageMap = createMessage(sender, req.getConversationId(), req.getContent(), req.getReplyToId(), null);
-
-        // Phát tin nhắn tới kênh STOMP
-        broadcastMessage(req.getConversationId(), messageMap);
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        Map<String,Object> m = createAndSaveMessage(sender.getId(), sender.getDisplayName(), sender.getAvatarUrl(),
+                req.getConversationId(), req.getContent(), req.getReplyToId(), req.getMediaFiles());
     }
 
-    /**
-     * Logic chung để tạo và lưu tin nhắn
-     */
-    private Map<String, Object> createMessage(User sender, Long conversationId, String content, Long replyToId, List<org.springframework.web.multipart.MultipartFile> mediaFiles) {
+    private Map<String,Object> createAndSaveMessage(Long senderId, String senderName, String senderAvatar,
+                                                    Long conversationId, String content, Long replyToId,
+                                                    List<org.springframework.web.multipart.MultipartFile> mediaFiles) {
         Conversation convo = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
-        List<Map<String, Object>> messages = convo.getMessages() != null
-                ? new ArrayList<>(convo.getMessages())
-                : new ArrayList<>();
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
-        // Xử lý file (nếu có)
-        List<Map<String, Object>> mediaList = new ArrayList<>();
+        // build media list
+        List<Map<String,Object>> media = new ArrayList<>();
         if (mediaFiles != null && !mediaFiles.isEmpty()) {
-            // (logic lưu file của bạn)
-            for (var file : mediaFiles) {
-                String url = storageService.saveFile(file, "messages");
-                String type = "file"; // (logic xác định type của bạn)
-                mediaList.add(Map.of("url", url, "type", type));
+            for (var f : mediaFiles) {
+                String url = storageService.saveFile(f, "messages");
+                String type = guessMediaTypeFromFilename(f.getOriginalFilename()); // implement helper
+                media.add(Map.of("url", url, "type", type));
             }
         }
 
-        // Tạo đối tượng message
-        Map<String, Object> message = new LinkedHashMap<>();
-        message.put("id", UUID.randomUUID().toString());
-        message.put("senderId", sender.getId());
-        message.put("senderName", sender.getDisplayName());
-        message.put("senderAvatar", sender.getAvatarUrl());
-        message.put("content", content);
+        Map<String,Object> message = new LinkedHashMap<>();
+        String msgId = UUID.randomUUID().toString();
+        message.put("id", msgId);
+        message.put("senderId", senderId);
+        message.put("senderName", senderName);
+        message.put("senderAvatar", senderAvatar);
         message.put("replyToId", replyToId);
-        message.put("media", mediaList);
-        message.put("timestamp", Instant.now().toString());
+        message.put("content", content);
+        message.put("media", media);
+        message.put("createdAt", Instant.now().toString());
+        message.put("reactions", new ArrayList<>()); // initially empty
+        message.put("isRead", false);
 
-        messages.addFirst(message); // Thêm vào đầu danh sách
-        convo.setMessages(messages);
-        conversationRepository.save(convo);
+        synchronized (getLock(conversationId)) {
+            List<Map<String,Object>> messages = convo.getMessages() != null
+                    ? new ArrayList<>(convo.getMessages())
+                    : new ArrayList<>();
+
+            // add at head -> newest first
+            messages.addFirst(message);
+            convo.setMessages(messages);
+            conversationRepository.save(convo);
+        }
+
+        // broadcast via STOMP
+        broadcastToConversationMembers(conversationId, message);
 
         return message;
     }
 
-    /**
-     * Logic chung để phát tin nhắn qua WebSocket
-     */
-    private void broadcastMessage(Long conversationId, Map<String, Object> messageMap) {
-        // Định nghĩa kênh STOMP
-        String destination = "/queue/conversation/" + conversationId;
+    private void broadcastToConversationMembers(Long conversationId, Map<String,Object> message) {
+        // destination for conversation (topic) - clients can subscribe
+        String topicDest = WebSocketConstants.CHAT_CONVERSATION_QUEUE + "/" + conversationId;
+        messagingTemplate.convertAndSend(topicDest, message);
 
-        // Gửi tin nhắn
-        // (Bạn nên chuyển 'messageMap' thành DTO, ví dụ 'MessageResponse')
-        messagingTemplate.convertAndSend(destination, messageMap);
+//        // per-user queue (if you want per-user delivery)
+//        // get members:
+//        List<Long> memberIds = memberRepository.findByConversationId(conversationId)
+//                .stream().map(cm -> cm.getUser().getId()).toList();
+//        for (Long uid : memberIds) {
+//            messagingTemplate.convertAndSendToUser(uid.toString(), "/queue/messages", message);
+//        }
     }
 
-    /**
-     * Lấy danh sách tin nhắn (đã được sắp xếp mới nhất -> cũ nhất)
-     */
+    // Helper to guess media type (image/video) – keep simple
+    private String guessMediaTypeFromFilename(String name) {
+        if (name == null) return "file";
+        String low = name.toLowerCase();
+        if (low.endsWith(".jpg") || low.endsWith(".jpeg") || low.endsWith(".png") || low.endsWith(".webp") || low.endsWith(".gif"))
+            return "image";
+        if (low.endsWith(".mp4") || low.endsWith(".webm") || low.endsWith(".mov"))
+            return "video";
+        return "file";
+    }
+
+    // Cursor paging logic
+    @Override
+    @Transactional(readOnly = true)
+    public CursorPage<MessageResponse> getMessagesCursor(Long conversationId, String beforeMessageId, int limit) {
+        Conversation convo = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        List<Map<String,Object>> messages = convo.getMessages() != null ? convo.getMessages() : List.of();
+
+        // messages stored newest first (index 0). We return a slice also newest-first.
+        int startIndex = 0; // default newest page
+        if (beforeMessageId != null && !beforeMessageId.isBlank()) {
+            // find index of message with id == beforeMessageId
+            int idx = -1;
+            for (int i = 0; i < messages.size(); i++) {
+                Object idObj = messages.get(i).get("id");
+                if (beforeMessageId.equals(String.valueOf(idObj))) {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx == -1) {
+                // if cursor not found, return empty page
+                return new CursorPage<>(List.of(), null);
+            }
+            // We want messages *after* that index (older messages): because idx points to last message of previous page,
+            // older ones are at indices > idx
+            startIndex = idx + 1;
+        }
+
+        if (startIndex >= messages.size()) {
+            return new CursorPage<>(List.of(), null);
+        }
+
+        int endIndexExclusive = Math.min(startIndex + limit, messages.size());
+        List<Map<String,Object>> pageSlice = messages.subList(startIndex, endIndexExclusive);
+
+        // map to MessageResponse
+        List<MessageResponse> content = pageSlice.stream().map(m -> mapToDto(conversationId, m)).collect(Collectors.toList());
+
+        String nextCursor = (endIndexExclusive < messages.size())
+                ? String.valueOf(messages.get(endIndexExclusive - 1).get("id"))
+                : null;
+
+        return new CursorPage<>(content, nextCursor);
+    }
+
+    private MessageResponse mapToDto(Long conversationId, Map<String,Object> m) {
+        MessageResponse r = new MessageResponse();
+        r.setId(String.valueOf(m.get("id")));
+        r.setConversationId(conversationId);
+        r.setSenderId(m.get("senderId") == null ? null : Long.valueOf(String.valueOf(m.get("senderId"))));
+        r.setSenderName((String) m.get("senderName"));
+        r.setSenderAvatar((String) m.get("senderAvatar"));
+        r.setReplyToId(m.get("replyToId")==null?null:Long.valueOf(String.valueOf(m.get("replyToId"))));
+        r.setContent((String) m.get("content"));
+        // media stored as List<Map<String,Object>>
+        r.setMedia((List<Map<String, Object>>) m.getOrDefault("media", List.of()));
+        r.setCreatedAt(m.get("createdAt") == null ? null : Instant.parse((String)m.get("createdAt")));
+        r.setIsRead(Boolean.TRUE.equals(m.get("isRead")));
+        r.setReactions((List<Map<String,Object>>) m.getOrDefault("reactions", List.of()));
+        return r;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getMessages(Long conversationId) {
         Conversation convo = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        return convo.getMessages() != null ? convo.getMessages() : List.of();
+    }
 
-        List<Map<String, Object>> messages = convo.getMessages();
-        return messages != null ? messages : List.of();
+    @Override
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getUserConversations(Long userId) {
+        throw new UnsupportedOperationException("Use ConversationService.getUserConversations");
     }
 }

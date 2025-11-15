@@ -3,10 +3,12 @@ package com.kt.social.config;
 // Các import cần thiết...
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kt.social.auth.security.JwtAuthenticationFilter;
+import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.exception.ErrorResponse;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -37,6 +39,9 @@ import java.util.List;
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
+
+    @Value("${frontend.base-url}")
+    private String frontendBaseUrl;
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
@@ -93,16 +98,8 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/api/auth/**",
-                                "/api/v1/auth/**",
-                                "/files/**",
-                                "/videos/**"
-                        ).permitAll()
-                        .requestMatchers("/ws", "/ws/chat", "/ws/notification", "/ws/**").permitAll()
+                        .requestMatchers(ApiConstants.SWAGGER_WHITELIST).permitAll()
+                        .requestMatchers(ApiConstants.PUBLIC_API_WHITELIST).permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore((Filter) jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -124,7 +121,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        config.setAllowedOrigins(List.of(frontendBaseUrl));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setExposedHeaders(List.of("Authorization"));

@@ -1,5 +1,6 @@
 package com.kt.social.domain.friendship.controller;
 
+import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.service.FriendshipService;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/friends")
+@RequestMapping(ApiConstants.FRIENDSHIP)
 @RequiredArgsConstructor
 public class FriendshipController {
 

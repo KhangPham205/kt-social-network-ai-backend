@@ -12,4 +12,5 @@ import java.util.List;
 public interface ConversationMemberRepository extends JpaRepository<ConversationMember, ConversationMemberId> {
     List<ConversationMember> findByConversation(Conversation conversation);
     List<ConversationMember> findByConversationId(Long conversationId);
+    List<ConversationMember> findByUserId(Long userId);
 }

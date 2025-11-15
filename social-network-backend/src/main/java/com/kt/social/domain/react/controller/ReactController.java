@@ -1,5 +1,6 @@
 package com.kt.social.domain.react.controller;
 
+import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.react.dto.*;
 import com.kt.social.domain.react.enums.TargetType;
@@ -12,7 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/reacts")
+@RequestMapping(ApiConstants.REACTS)
 @RequiredArgsConstructor
 public class ReactController {
 
