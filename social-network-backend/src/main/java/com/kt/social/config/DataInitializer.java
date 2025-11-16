@@ -65,13 +65,20 @@ public class DataInitializer {
         Permission updateAnyUser = findOrCreatePermission("USER", "UPDATE_ANY", "Update any user profile/role (Admin)");
         Permission deleteAnyUser = findOrCreatePermission("USER", "DELETE_ANY", "Delete/Ban any user (Admin)");
 
+        Permission createReport = findOrCreatePermission("REPORT", "CREATE", "Create a new report");
+
+        Permission readModQueue = findOrCreatePermission("MODERATION", "READ", "Read moderation queues (reports)");
+        Permission updateModQueue = findOrCreatePermission("MODERATION", "UPDATE", "Review/Action reports");
+
         assignPermissions(userRole, Set.of(
                 createPost, updatePost, deletePost,
-                createComment, updateComment, deleteComment
+                createComment, updateComment, deleteComment,
+                createReport
         ));
 
         assignPermissions(moderatorRole, Set.of(
-                deleteAnyPost, deleteAnyComment
+                deleteAnyPost, deleteAnyComment,
+                readModQueue, updateModQueue
         ));
 
         assignPermissions(adminRole, Set.of(
@@ -79,7 +86,8 @@ public class DataInitializer {
                 createComment, updateComment, deleteComment,
                 deleteAnyPost, deleteAnyComment,
                 readAdminDashboard, createStaff, deleteUser,
-                readAllUsers, updateAnyUser, deleteAnyUser
+                readAllUsers, updateAnyUser, deleteAnyUser,
+                readModQueue, updateModQueue
         ));
 
         if (!userCredentialRepository.existsByUsername(adminUsername)) {

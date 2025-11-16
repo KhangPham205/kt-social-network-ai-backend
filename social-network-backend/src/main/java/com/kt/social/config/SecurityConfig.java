@@ -127,7 +127,17 @@ public class SecurityConfig {
                         // 6. Friendship API
                         .requestMatchers(ApiConstants.FRIENDSHIP + "/**").authenticated()
 
-                        // 7. Quy tắc cuối cùng (Giữ nguyên)
+                        // 7. Report API
+                        .requestMatchers(HttpMethod.POST, ApiConstants.REPORTS + "/**")
+                        .hasAuthority("REPORT:CREATE")
+
+                        // 8. Moderation API
+                        .requestMatchers(HttpMethod.GET, ApiConstants.MODERATION + "/**")
+                        .hasAuthority("MODERATION:READ")
+                        .requestMatchers(HttpMethod.PUT, ApiConstants.MODERATION + "/**")
+                        .hasAuthority("MODERATION:UPDATE")
+
+                        // 9. Any other requests
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore((Filter) jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

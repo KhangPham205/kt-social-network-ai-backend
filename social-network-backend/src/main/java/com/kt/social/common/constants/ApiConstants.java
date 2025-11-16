@@ -66,6 +66,18 @@ public final class ApiConstants {
      */
     public static final String MESSAGES = API_V1 + "/messages";
 
+    /**
+     * Đường dẫn gốc cho Report Controller
+     * (Ví dụ: /api/v1/reports)
+     */
+    public static final String REPORTS = API_V1 + "/reports";
+
+    /**
+     * Đường dẫn gốc cho Moderation Controller
+     * (Ví dụ: /api/v1/moderation)
+     */
+    public static final String MODERATION = API_V1 + "/moderation";
+
 
     //================================================================
     //== Public/Non-API Paths
