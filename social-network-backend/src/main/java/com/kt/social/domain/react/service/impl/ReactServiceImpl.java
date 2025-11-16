@@ -1,6 +1,7 @@
 package com.kt.social.domain.react.service.impl;
 
 import com.kt.social.common.vo.PageVO;
+import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.notification.enums.NotificationType;
@@ -13,7 +14,6 @@ import com.kt.social.domain.react.model.*;
 import com.kt.social.domain.react.repository.*;
 import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
-import com.kt.social.domain.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -29,10 +29,10 @@ public class ReactServiceImpl implements ReactService {
 
     private final ReactRepository reactRepository;
     private final ReactTypeRepository reactTypeRepository;
-    private final UserRepository userRepository;
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final NotificationService notificationService;
+    private final ActivityLogService activityLogService;
 
     @Override
     @Transactional
@@ -63,6 +63,14 @@ public class ReactServiceImpl implements ReactService {
                 existing.setCreatedAt(Instant.now());
                 reactRepository.save(existing);
                 isNewReact = true;
+
+                activityLogService.logActivity(
+                        user,
+                        "REACT:UPDATE",
+                        tType.name(),
+                        targetId,
+                        Map.of("newReactTypeId", req.getReactTypeId())
+                );
             }
         } else {
             // Chưa có → thêm mới
@@ -77,6 +85,14 @@ public class ReactServiceImpl implements ReactService {
                             .build()
             );
             isNewReact = true;
+
+            activityLogService.logActivity(
+                    user,
+                    "REACT:CREATE",
+                    tType.name(),
+                    targetId,
+                    Map.of("reactTypeId", req.getReactTypeId())
+            );
         }
 
         // Cập nhật đếm (sử dụng countBy để không cần fetch all)

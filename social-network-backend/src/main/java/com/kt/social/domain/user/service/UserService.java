@@ -1,6 +1,8 @@
 package com.kt.social.domain.user.service;
 
 import com.kt.social.common.vo.PageVO;
+import com.kt.social.domain.admin.dto.AdminUpdateUserRequest;
+import com.kt.social.domain.admin.dto.AdminUserViewDto;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.model.User;
 import jakarta.transaction.Transactional;
@@ -22,4 +24,9 @@ public interface UserService {
     PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable);
     UserProfileDto updateAvatar(MultipartFile avatarFile);
     UserRelationDto getRelationWithUser(Long targetUserId);
+
+    PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable);
+    AdminUserViewDto getUserByIdAsAdmin(Long userId);
+    AdminUserViewDto updateUserAsAdmin(Long userId, AdminUpdateUserRequest request);
+    void deleteUserAsAdmin(Long userId);
 }

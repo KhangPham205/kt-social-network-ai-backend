@@ -61,6 +61,10 @@ public class DataInitializer {
         Permission createStaff = findOrCreatePermission("USER", "CREATE", "Create new Staff Account (Admin/Mod)");
         Permission deleteUser = findOrCreatePermission("USER", "DELETE", "Delete any User Account");
 
+        Permission readAllUsers = findOrCreatePermission("USER", "READ_ALL", "Read all user profiles (Admin)");
+        Permission updateAnyUser = findOrCreatePermission("USER", "UPDATE_ANY", "Update any user profile/role (Admin)");
+        Permission deleteAnyUser = findOrCreatePermission("USER", "DELETE_ANY", "Delete/Ban any user (Admin)");
+
         assignPermissions(userRole, Set.of(
                 createPost, updatePost, deletePost,
                 createComment, updateComment, deleteComment
@@ -74,7 +78,8 @@ public class DataInitializer {
                 createPost, updatePost, deletePost,
                 createComment, updateComment, deleteComment,
                 deleteAnyPost, deleteAnyComment,
-                readAdminDashboard, createStaff, deleteUser
+                readAdminDashboard, createStaff, deleteUser,
+                readAllUsers, updateAnyUser, deleteAnyUser
         ));
 
         if (!userCredentialRepository.existsByUsername(adminUsername)) {

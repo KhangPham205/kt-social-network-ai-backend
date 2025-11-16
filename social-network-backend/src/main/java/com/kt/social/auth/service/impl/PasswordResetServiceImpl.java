@@ -9,12 +9,14 @@ import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.service.EmailService;
 import com.kt.social.auth.service.PasswordResetService;
 import com.kt.social.common.exception.ResourceNotFoundException;
+import com.kt.social.domain.audit.service.ActivityLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -25,15 +27,14 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final ActivityLogService activityLogService;
 
     private static final long EXPIRATION_TIME = 2 * 60; // 2 minutes
 
     @Override
     public void sendResetCode(PasswordResetRequest request) {
-        Optional<UserCredential> userOpt = userCredentialRepository.findByEmail(request.getEmail());
-        if (userOpt.isEmpty()) {
-            throw new ResourceNotFoundException("No account found with this email");
-        }
+        UserCredential user = userCredentialRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new ResourceNotFoundException("No account found with this email"));
 
         // Xóa mã cũ nếu tồn tại
         passwordResetTokenRepository.deleteByEmail(request.getEmail());
@@ -49,7 +50,16 @@ public class PasswordResetServiceImpl implements PasswordResetService {
 
         passwordResetTokenRepository.save(resetToken);
 
+        if (user.getUser() != null) {
+            activityLogService.logActivity(
+                    user.getUser(),
+                    "AUTH:RESET_PASSWORD_REQUEST",
+                    null, null,
+                    Map.of("email", request.getEmail())
+            );
+        }
+
         // Gửi email chứa mã xác thực
-        emailService.sendEmail(userOpt.get(), OtpType.RESET_PASSWORD, code);
+        emailService.sendEmail(user, OtpType.RESET_PASSWORD, code);
     }
 }

@@ -6,6 +6,7 @@ import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
+import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.post.dto.PostRequest;
@@ -46,6 +47,7 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class PostServiceImpl implements PostService {
 
+    private final ActivityLogService activityLogService;
     private final UserRelaRepository userRelaRepository;
     private final FriendshipRepository friendshipRepository;
     private final PostRepository postRepository;
@@ -80,8 +82,17 @@ public class PostServiceImpl implements PostService {
                 .createdAt(Instant.now())
                 .build();
 
-        postRepository.save(post);
-        PostResponse dto = postMapper.toDto(post);
+        Post savedPost = postRepository.save(post);
+
+        activityLogService.logActivity(
+                author,
+                "POST:CREATE",
+                "Post",
+                savedPost.getId(),
+                Map.of("accessScope", savedPost.getAccessModifier().toString())
+        );
+
+        PostResponse dto = postMapper.toDto(savedPost);
         dto.setReactSummary(ReactSummaryDto.builder().build());
         dto.setShareCount(0);
         return dto;    }
@@ -134,9 +145,17 @@ public class PostServiceImpl implements PostService {
 
         post.setMedia(mediaList);
         post.setUpdatedAt(Instant.now());
-        postRepository.save(post);
+        Post savedPost = postRepository.save(post);
 
-        return toDtoWithReactsAndShares(post, currentUser.getId());
+        activityLogService.logActivity(
+                currentUser,
+                "POST:UPDATE",
+                "Post",
+                savedPost.getId(),
+                Map.of("newAccessScope", savedPost.getAccessModifier().toString())
+        );
+
+        return toDtoWithReactsAndShares(savedPost, currentUser.getId());
     }
 
     @Override
@@ -210,8 +229,17 @@ public class PostServiceImpl implements PostService {
                 .createdAt(Instant.now())
                 .build();
 
-        postRepository.save(shared);
-        return toDtoWithReactsAndShares(shared, currentUser.getId());
+        Post savedSharedPost = postRepository.save(shared);
+
+        activityLogService.logActivity(
+                currentUser,
+                "POST:SHARE",
+                "Post",
+                savedSharedPost.getId(),
+                Map.of("originalPostId", originalPostId)
+        );
+
+        return toDtoWithReactsAndShares(savedSharedPost, currentUser.getId());
     }
 
     @Override
@@ -285,6 +313,14 @@ public class PostServiceImpl implements PostService {
         postRepository.saveAll(shares);
 
         postRepository.delete(post);
+
+        activityLogService.logActivity(
+                currentUser,
+                "POST:DELETE",
+                "Post",
+                postId,
+                Map.of("deletedPostAuthorId", post.getAuthor().getId())
+        );
     }
 
     // --------------------- Helper methods -------------------------

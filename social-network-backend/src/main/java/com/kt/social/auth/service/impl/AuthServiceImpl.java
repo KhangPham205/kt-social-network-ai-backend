@@ -18,13 +18,14 @@ import com.kt.social.auth.service.RefreshTokenService;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.InvalidCredentialsException;
 import com.kt.social.common.exception.ResourceNotFoundException;
+import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.user.model.UserInfo;
 import com.kt.social.domain.user.repository.UserInfoRepository;
 import com.kt.social.domain.user.repository.UserRepository;
+import com.kt.social.domain.user.service.UserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -34,6 +35,7 @@ import org.springframework.stereotype.Service;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -50,8 +52,9 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final UserInfoRepository userInfoRepository;
+    private final UserService userService;
     private final EmailService emailService;
-    private final AuthenticationManager authenticationManager;
+    private final ActivityLogService activityLogService;
 
     @Override
     @Transactional
@@ -93,6 +96,14 @@ public class AuthServiceImpl implements AuthService {
 
         userInfoRepository.save(userInfo);
 
+        activityLogService.logActivity(
+                user,                   // (Actor)
+                "AUTH:REGISTER",        // (Action)
+                "User",                 // (TargetType)
+                user.getId(),           // (TargetId)
+                Map.of("email", user.getCredential().getEmail()) // (Details)
+        );
+
         return new RegisterResponse("Registered Successfully");
     }
 
@@ -118,12 +129,15 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalStateException("Tài khoản " + userCredential.getUsername() + " không có User profile liên kết. Không thể đăng nhập.");
         }
 
+        activityLogService.logActivity(
+                user,           // (Actor)
+                "AUTH:LOGIN",   // (Action)
+                null, null, null
+        );
+
         Long idForToken = user.getId();
-
         UserDetails userDetails = buildUserDetails(userCredential);
-
         String accessToken = jwtProvider.generateToken(userDetails, idForToken);
-
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
 
         return LoginResponse.builder()
@@ -139,7 +153,16 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logout(String accessToken) {
         String username = jwtProvider.extractUsername(accessToken);
-        userCredentialRepository.findByUsername(username).ifPresent(refreshTokenRepository::deleteByUser);
+        userCredentialRepository.findByUsername(username).ifPresent(userCredential -> {
+            if (userCredential.getUser() != null) {
+                activityLogService.logActivity(
+                        userCredential.getUser(), // (Actor)
+                        "AUTH:LOGOUT",            // (Action)
+                        null, null, null
+                );
+            }
+            refreshTokenRepository.deleteByUser(userCredential);
+        });
         SecurityContextHolder.clearContext();
     }
 
@@ -190,7 +213,8 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("Username is already in use");
         }
 
-        // 1. Tìm Role dựa trên request (thay vì hard-code "USER")
+        com.kt.social.domain.user.model.User adminActor = userService.getCurrentUser();
+
         Role staffRole = roleRepository.findByName(request.getRoleName().toUpperCase())
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + request.getRoleName()));
 
@@ -202,12 +226,11 @@ public class AuthServiceImpl implements AuthService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .email(request.getEmail())
                 .roles(initialRoles)
-                .status(AccountStatus.ACTIVE) // <-- Kích hoạt ngay
+                .status(AccountStatus.ACTIVE)
                 .build();
 
         userCredentialRepository.save(userCredential);
 
-        // 2. Tạo User profile
         com.kt.social.domain.user.model.User user = com.kt.social.domain.user.model.User.builder()
                 .displayName(request.getFullname())
                 .isActive(true)
@@ -216,7 +239,6 @@ public class AuthServiceImpl implements AuthService {
 
         userRepository.save(user);
 
-        // 3. Tạo UserInfo (với các trường mặc định)
         UserInfo userInfo = UserInfo.builder()
                 .bio("Tài khoản nhân viên.")
                 .favorites("")
@@ -224,6 +246,15 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         userInfoRepository.save(userInfo);
+
+        activityLogService.logActivity(
+                adminActor,     // (Actor là Admin)
+                "USER:CREATE",  // (Action)
+                "User",         // (TargetType)
+                user.getId(), // (TargetId là user mới)
+                Map.of("newStaffUsername", user.getCredential().getUsername(),
+                        "newStaffRole", staffRole.getName())
+        );
 
         return new RegisterResponse("Staff account created successfully");
     }
@@ -255,6 +286,15 @@ public class AuthServiceImpl implements AuthService {
             user.setVerificationCode(null);
             user.setVerificationCodeExpiry(null);
             userCredentialRepository.save(user);
+
+            if (user.getUser() != null) {
+                activityLogService.logActivity(
+                        user.getUser(),
+                        "AUTH:VERIFY_EMAIL",
+                        null, null, null
+                );
+            }
+
             return true;
         }
         return false;

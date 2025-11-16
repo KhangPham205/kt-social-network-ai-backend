@@ -6,6 +6,7 @@ import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.service.BaseFilterService;
 import com.kt.social.common.utils.BlockUtils;
 import com.kt.social.common.vo.PageVO;
+import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.model.Friendship;
@@ -35,6 +36,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRelationDto> implements FriendshipService {
 
+    private final ActivityLogService activityLogService;
     private final BlockUtils blockUtils;
     private final ConversationService conversationService;
     private final FriendshipRepository friendshipRepository;
@@ -92,6 +94,14 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 null            // (không có post)
         );
 
+        activityLogService.logActivity(
+                sender,
+                "FRIENDSHIP:SEND_REQUEST",
+                "User",
+                targetId,
+                null
+        );
+
         return new FriendshipResponse("Friend request sent", FriendshipStatus.PENDING, userId, targetId);
     }
 
@@ -131,6 +141,14 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 null              // (không có post)
         );
 
+        activityLogService.logActivity(
+                receiver, // (Actor là người chấp nhận)
+                "FRIENDSHIP:ACCEPT_REQUEST",
+                "User",
+                senderId,
+                null
+        );
+
         return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }
 
@@ -144,6 +162,15 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
         }
 
         friendshipRepository.delete(f);
+
+        activityLogService.logActivity(
+                getUser(receiverId), // (Actor là người từ chối)
+                "FRIENDSHIP:REJECT_REQUEST",
+                "User",
+                senderId,
+                null
+        );
+
         return new FriendshipResponse("Friend request rejected", FriendshipStatus.REJECTED, senderId, receiverId);
     }
 
@@ -169,6 +196,14 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
 
         userRelaRepository.deleteByFollowerAndFollowing(u1, u2);
         userRelaRepository.deleteByFollowerAndFollowing(u2, u1);
+
+        activityLogService.logActivity(
+                u1, // (Actor là người hủy kết bạn)
+                "FRIENDSHIP:UNFRIEND",
+                "User",
+                friendId,
+                null
+        );
 
         return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED, userId, friendId);
     }
@@ -199,6 +234,14 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
         f.setStatus(FriendshipStatus.BLOCKED);
         friendshipRepository.save(f);
 
+        activityLogService.logActivity(
+                user, // (Actor là người chặn)
+                "USER:BLOCK",
+                "User",
+                targetId,
+                null
+        );
+
         return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED, userId, targetId);
     }
 
@@ -212,6 +255,15 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
             throw new BadRequestException("This user is not blocked");
 
         friendshipRepository.delete(friendship);
+
+        activityLogService.logActivity(
+                getUser(userId), // (Actor là người bỏ chặn)
+                "USER:UNBLOCK",
+                "User",
+                targetId,
+                null
+        );
+
         return new FriendshipResponse("User unblocked successfully", FriendshipStatus.REJECTED, userId, targetId);
     }
 
@@ -229,6 +281,15 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
             throw new BadRequestException("Cannot unsend a request that is not pending");
 
         friendshipRepository.delete(f);
+
+        activityLogService.logActivity(
+                getUser(userId), // (Actor là người hủy yêu cầu)
+                "FRIENDSHIP:UNSEND_REQUEST",
+                "User",
+                targetId,
+                null
+        );
+
         return new FriendshipResponse("Friend request unsent", null, userId, targetId);
     }
 

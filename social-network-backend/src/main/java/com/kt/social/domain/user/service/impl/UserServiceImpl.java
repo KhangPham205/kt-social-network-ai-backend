@@ -1,14 +1,19 @@
 package com.kt.social.domain.user.service.impl;
 
+import com.kt.social.auth.enums.AccountStatus;
+import com.kt.social.auth.model.Role;
 import com.kt.social.auth.model.UserCredential;
+import com.kt.social.auth.repository.RoleRepository;
 import com.kt.social.auth.repository.UserCredentialRepository;
-import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.service.BaseFilterService;
 import com.kt.social.common.utils.BlockUtils;
 import com.kt.social.common.vo.PageVO;
+import com.kt.social.domain.admin.dto.AdminUpdateUserRequest;
+import com.kt.social.domain.admin.dto.AdminUserViewDto;
+import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
@@ -18,6 +23,7 @@ import com.kt.social.domain.user.model.*;
 import com.kt.social.domain.user.repository.*;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.StorageService;
+import io.github.perplexhub.rsql.RSQLJPASupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,10 +46,12 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     private final BlockUtils blockUtils;
     private final UserCredentialRepository userCredentialRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final UserRelaRepository userRelaRepository;
     private final FriendshipRepository friendshipRepository;
     private final UserMapper userMapper;
     private final StorageService storageService;
+    private final ActivityLogService activityLogService;
 
     @Override
     public User getCurrentUser() {
@@ -102,6 +110,15 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         }
 
         userRepository.save(user);
+
+        activityLogService.logActivity(
+                user,
+                "USER:UPDATE_PROFILE",
+                "USER",
+                user.getId(),
+                null
+        );
+
         return userMapper.toDto(user);
     }
 
@@ -127,6 +144,15 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 .build();
 
         userRelaRepository.save(rela);
+
+        activityLogService.logActivity(
+                follower,
+                "USER:FOLLOW",
+                "USER",
+                targetId,
+                null
+        );
+
         return new FollowResponse("Followed successfully", true);
     }
 
@@ -148,6 +174,15 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         }
 
         userRelaRepository.deleteByFollowerAndFollowing(follower, following);
+
+        activityLogService.logActivity(
+                follower,
+                "USER:UNFOLLOW",
+                "USER",
+                targetId,
+                null
+        );
+
         return new FollowResponse("Unfollowed successfully", false);
     }
 
@@ -162,6 +197,15 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
             throw new BadRequestException("This user is not following you");
 
         userRelaRepository.deleteByFollowerAndFollowing(follower, current);
+
+        activityLogService.logActivity(
+                current, // (Actor là 'current' - người thực hiện)
+                "USER:REMOVE_FOLLOWER",
+                "USER", // (Target là 'follower')
+                followerId,
+                null
+        );
+
         return new FollowResponse("Removed follower successfully", false);
     }
 
@@ -180,6 +224,14 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         user.setAvatarUrl(avatarUrl);
         userRepository.save(user);
 
+        activityLogService.logActivity(
+                user,
+                "USER:UPDATE_AVATAR",
+                "USER",
+                user.getId(),
+                Map.of("newAvatarUrl", avatarUrl)
+        );
+
         return userMapper.toDto(user);
     }
 
@@ -190,6 +242,117 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         return mapToRelationDto(current, target);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable) {
+        // 1. Admin BỎ QUA logic block/hide, chỉ filter theo RSQL
+        Specification<User> spec = Specification.where(null);
+        if (filter != null && !filter.isBlank()) {
+            spec = RSQLJPASupport.toSpecification(filter);
+        }
+
+        // 2. Query
+        Page<User> userPage = userRepository.findAll(spec, pageable);
+
+        // 3. Map sang DTO Admin
+        List<AdminUserViewDto> content = userPage.getContent().stream()
+                .map(userMapper::toAdminViewDto)
+                .toList();
+
+        return PageVO.<AdminUserViewDto>builder()
+                .page(userPage.getNumber())
+                .size(userPage.getSize())
+                .totalElements(userPage.getTotalElements())
+                .totalPages(userPage.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminUserViewDto getUserByIdAsAdmin(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        return userMapper.toAdminViewDto(user);
+    }
+
+    @Override
+    @Transactional
+    public AdminUserViewDto updateUserAsAdmin(Long userId, AdminUpdateUserRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        UserCredential credential = user.getCredential();
+
+        if (request.getDisplayName() != null) {
+            user.setDisplayName(request.getDisplayName());
+        }
+
+        if (request.getBio() != null && user.getUserInfo() != null) {
+            user.getUserInfo().setBio(request.getBio());
+        }
+
+        if (request.getStatus() != null) {
+            credential.setStatus(request.getStatus());
+            // Nếu ban (cấm), set 'isActive' = false
+            if (request.getStatus() == AccountStatus.BLOCKED) {
+                user.setIsActive(false);
+            } else if (request.getStatus() == AccountStatus.ACTIVE) {
+                user.setIsActive(true);
+            }
+        }
+
+        if (request.getRoles() != null && !request.getRoles().isEmpty()) {
+            Set<Role> newRoles = new HashSet<>();
+            for (String roleName : request.getRoles()) {
+                Role role = roleRepository.findByName(roleName.toUpperCase())
+                        .orElseThrow(() -> new BadRequestException("Role not found: " + roleName));
+                newRoles.add(role);
+            }
+            credential.setRoles(newRoles);
+        }
+
+        User savedUser = userRepository.save(user);
+        userCredentialRepository.save(credential);
+
+        activityLogService.logActivity(
+                getCurrentUser(),
+                "USER:UPDATE_ANY",
+                "User",
+                savedUser.getId(),
+                Map.of("changes", request.toString())
+        );
+
+        return userMapper.toAdminViewDto(savedUser);
+    }
+
+    /**
+     * CRU(D): Xóa/Cấm user (Admin)
+     */
+    @Override
+    @Transactional
+    public void deleteUserAsAdmin(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        UserCredential credential = user.getCredential();
+
+        // Đây là "Soft Delete" (Xóa mềm)
+        credential.setStatus(AccountStatus.BLOCKED);
+
+        userRepository.save(user);
+        userCredentialRepository.save(credential);
+
+        // Ghi Log
+        activityLogService.logActivity(
+                getCurrentUser(), // Actor là Admin
+                "USER:DELETE_ANY",
+                "User",
+                userId,
+                Map.of("bannedUsername", credential.getUsername())
+        );
     }
 
     // ---------------------- Search + Filter ----------------------
