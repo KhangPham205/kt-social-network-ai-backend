@@ -95,6 +95,7 @@ public class MessageServiceImpl implements MessageService {
             // add at head -> newest first
             messages.addFirst(message);
             convo.setMessages(messages);
+            convo.setUpdatedAt(Instant.now());
             conversationRepository.save(convo);
         }
 

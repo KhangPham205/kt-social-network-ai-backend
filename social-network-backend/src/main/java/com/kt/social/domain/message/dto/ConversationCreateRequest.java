@@ -1,6 +1,7 @@
 package com.kt.social.domain.message.dto;
 
 import lombok.Data;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -8,6 +9,6 @@ import java.util.List;
 public class ConversationCreateRequest {
     private Boolean isGroup;
     private String title;
-    private String mediaUrl;
+    private MultipartFile media;
     private List<Long> memberIds; // danh sách id user trong nhóm
 }

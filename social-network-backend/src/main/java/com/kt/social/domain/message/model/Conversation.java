@@ -27,6 +27,8 @@ public class Conversation {
 
     private Instant createdAt;
 
+    private Instant updatedAt;
+
     @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<ConversationMember> members;
 

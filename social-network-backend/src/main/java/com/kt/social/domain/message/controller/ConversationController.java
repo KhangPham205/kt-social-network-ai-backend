@@ -1,17 +1,16 @@
 // ConversationController.java (get my conversations)
 package com.kt.social.domain.message.controller;
 
-import com.kt.social.domain.message.dto.ConversationCreateRequest;
-import com.kt.social.domain.message.dto.ConversationResponse;
+import com.kt.social.domain.message.dto.*;
 import com.kt.social.domain.message.service.ConversationService;
 import com.kt.social.domain.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/conversations")
@@ -26,8 +25,49 @@ public class ConversationController {
         return ResponseEntity.ok(conversationService.createConversation(req));
     }
 
+    @PutMapping(value = "/{conversationId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ConversationSummaryResponse> updateConversation(
+            @ModelAttribute UpdateConversationRequest request
+    ) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(
+                conversationService.updateConversation(currentUserId, request)
+        );
+    }
+
+    @PostMapping("/{conversationId}/members")
+    public ResponseEntity<ConversationSummaryResponse> addMembers(
+            @RequestBody AddMembersRequest request
+    ) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(
+                conversationService.addMembersToGroup(currentUserId, request)
+        );
+    }
+
+    @DeleteMapping("/{conversationId}/members/{userIdToRemove}")
+    public ResponseEntity<ConversationSummaryResponse> removeMember(
+            @PathVariable Long conversationId,
+            @PathVariable Long userIdToRemove
+    ) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(
+                conversationService.removeMemberFromGroup(currentUserId, conversationId, userIdToRemove)
+        );
+    }
+
+    @PutMapping("/{conversationId}/members/{userIdToChange}/role")
+    public ResponseEntity<ConversationSummaryResponse> updateMemberRole(
+            @RequestBody UpdateMemberRoleRequest request
+    ) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(
+                conversationService.updateMemberRole(currentUserId, request)
+        );
+    }
+
     @GetMapping("/me")
-    public ResponseEntity<List<Map<String,Object>>> myConversations(Principal principal) {
+    public ResponseEntity<List<ConversationSummaryResponse>> myConversations(Principal principal) {
         Long userId = userService.getCurrentUser().getId();
         return ResponseEntity.ok(conversationService.getUserConversations(userId));
     }
