@@ -21,11 +21,15 @@ public class ConversationMember {
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("conversationId")
     @JoinColumn(name = "conversation_id")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private Conversation conversation;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("userId")
     @JoinColumn(name = "user_id")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private User user;
 
     private Instant joinedAt;

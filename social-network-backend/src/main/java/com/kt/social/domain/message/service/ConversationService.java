@@ -9,5 +9,5 @@ import java.util.Map;
 public interface ConversationService {
     ConversationResponse createConversation(ConversationCreateRequest req);
     List<Map<String, Object>> getUserConversations(Long userId);
-    ConversationResponse findOrCreateDirectConversation(Long userAId, Long userBId);
+    void findOrCreateDirectConversation(Long userAId, Long userBId);
 }

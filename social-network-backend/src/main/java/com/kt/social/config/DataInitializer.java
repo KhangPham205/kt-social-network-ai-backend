@@ -70,13 +70,11 @@ public class DataInitializer {
             User adminUser = User.builder()
                     .displayName("Administrator")
                     .isActive(true)
-                    // .credential(adminCredential) // Tạm thời chưa set
                     .build();
 
             // 3. Tạo UserInfo (Chưa save)
             UserInfo adminInfo = UserInfo.builder()
                     .bio("Tài khoản quản trị viên")
-                    // .user(adminUser) // Tạm thời chưa set
                     .build();
 
             adminCredential.setUser(adminUser);
@@ -85,8 +83,7 @@ public class DataInitializer {
             adminUser.setUserInfo(adminInfo);
             adminInfo.setUser(adminUser);
 
-            userCredentialRepository.save(adminCredential);
-
+            userRepository.save(adminUser);
             System.out.println("✅ Default admin account (với profile) created: " + adminUsername);
         } else {
             System.out.println("ℹ️ Admin account already exists, skipping creation.");

@@ -19,10 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -99,38 +96,58 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getUserConversations(Long userId) {
         List<ConversationMember> joined = conversationMemberRepository.findByUserId(userId);
-        return joined.stream().map(cm -> {
-            Conversation c = cm.getConversation();
-            Map<String,Object> lastMessage = (c.getMessages() != null && !c.getMessages().isEmpty())
-                    ? c.getMessages().getFirst() // newest first
-                    : null;
-            List<Long> memberIds = c.getMembers().stream().map(m -> m.getUser().getId()).toList();
-            assert lastMessage != null;
-            return Map.of(
-                    "conversationId", c.getId(),
-                    "title", c.getTitle(),
-                    "isGroup", c.getIsGroup(),
-                    "lastMessage", lastMessage,
-                    "memberIds", memberIds,
-                    "createdAt", c.getCreatedAt()
-            );
-        }).toList();
+
+        return joined.stream()
+                .map(cm -> {
+                    Conversation c = cm.getConversation();
+
+                    if (c == null) {
+                        return null;
+                    }
+
+                    Map<String,Object> lastMessage = (c.getMessages() != null && !c.getMessages().isEmpty())
+                            ? c.getMessages().getFirst()
+                            : null;
+
+                    List<Long> memberIds;
+                    if (c.getMembers() == null) {
+                        memberIds = List.of();
+                    } else {
+                        memberIds = c.getMembers().stream()
+                                .map(ConversationMember::getUser)
+                                .filter(Objects::nonNull)
+                                .map(User::getId)
+                                .toList();
+                    }
+
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("conversationId", c.getId());
+                    map.put("title", c.getTitle());
+                    map.put("isGroup", c.getIsGroup());
+                    map.put("lastMessage", lastMessage);
+                    map.put("memberIds", memberIds);
+                    map.put("createdAt", c.getCreatedAt());
+
+                    return map;
+                    // 🔥 KẾT THÚC SỬA
+                })
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     @Override
     @Transactional
-    public ConversationResponse findOrCreateDirectConversation(Long userAId, Long userBId) {
-        // sort ids để ổn định key (không bắt buộc nhưng hợp lý)
+    public void findOrCreateDirectConversation(Long userAId, Long userBId) {
         List<Long> ids = Stream.of(userAId, userBId).sorted().toList();
 
         Optional<Conversation> existing = conversationRepository.findDirectConversationBetween(ids);
         if (existing.isPresent()) {
             Conversation c = existing.get();
-            // build response
+
             List<Long> memberIds = memberRepository.findByConversation(c)
                     .stream().map(cm -> cm.getUser().getId()).toList();
 
-            return ConversationResponse.builder()
+            ConversationResponse.builder()
                     .id(c.getId())
                     .isGroup(c.getIsGroup())
                     .title(c.getTitle())
@@ -138,10 +155,9 @@ public class ConversationServiceImpl implements ConversationService {
                     .createdAt(c.getCreatedAt())
                     .memberIds(memberIds)
                     .build();
+            return;
         }
 
-        // Nếu chưa có => tạo conversation mới _không_ phụ thuộc vào SecurityUtils
-        // Lấy user entities
         User a = userRepository.findById(userAId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userAId));
         User b = userRepository.findById(userBId)
@@ -163,7 +179,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .conversation(saved)
                 .user(a)
                 .joinedAt(Instant.now())
-                .role(ConversationRole.OWNER) // hoặc MEMBER, tùy quy ước
+                .role(ConversationRole.MEMBER) // hoặc MEMBER, tùy quy ước
                 .build();
 
         ConversationMember cmB = ConversationMember.builder()
@@ -178,7 +194,7 @@ public class ConversationServiceImpl implements ConversationService {
         memberRepository.save(cmB);
 
         List<Long> memberIds = List.of(a.getId(), b.getId());
-        return ConversationResponse.builder()
+        ConversationResponse.builder()
                 .id(saved.getId())
                 .isGroup(saved.getIsGroup())
                 .title(saved.getTitle())
