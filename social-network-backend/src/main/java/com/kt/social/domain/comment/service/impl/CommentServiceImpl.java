@@ -11,6 +11,8 @@ import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.comment.service.CommentService;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
+import com.kt.social.domain.notification.enums.NotificationType;
+import com.kt.social.domain.notification.service.NotificationService;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.dto.ReactSummaryDto;
@@ -45,6 +47,7 @@ public class CommentServiceImpl implements CommentService {
     private final UserService userService;
     private final ReactService reactService;
     private final StorageService storageService;
+    private final NotificationService notificationService;
 
     // ---------------- CREATE ----------------
     @Override
@@ -81,6 +84,30 @@ public class CommentServiceImpl implements CommentService {
 
         Comment saved = commentRepository.save(comment);
         safeUpdateCommentCount(post.getId(), 1);
+
+        if (request.getParentId() != null) {
+            // Đây là Reply
+            assert parent != null;
+            User parentAuthor = parent.getAuthor();
+            notificationService.sendNotification(
+                    author,
+                    parentAuthor,
+                    NotificationType.REPLY_COMMENT,
+                    saved.getId(), // ID của reply
+                    post.getId()   // ID của post gốc
+            );
+        } else {
+            // Đây là Comment gốc
+            User postAuthor = post.getAuthor();
+            notificationService.sendNotification(
+                    author,
+                    postAuthor,
+                    NotificationType.COMMENT_POST,
+                    saved.getId(), // ID của comment
+                    post.getId()   // ID của post gốc
+            );
+        }
+
         return toDtoWithChildrenAndReacts(saved, author.getId(), 0);
     }
 

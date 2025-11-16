@@ -3,6 +3,8 @@ package com.kt.social.domain.react.service.impl;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
+import com.kt.social.domain.notification.enums.NotificationType;
+import com.kt.social.domain.notification.service.NotificationService;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.dto.*;
@@ -30,6 +32,7 @@ public class ReactServiceImpl implements ReactService {
     private final UserRepository userRepository;
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -47,6 +50,7 @@ public class ReactServiceImpl implements ReactService {
 
         // Kiểm tra react hiện tại
         var existing = reactRepository.findByUserAndTargetIdAndTargetType(user, targetId, tType).orElse(null);
+        boolean isNewReact = false;
 
         if (existing != null) {
             // Cùng loại → Hủy
@@ -58,6 +62,7 @@ public class ReactServiceImpl implements ReactService {
                 existing.setReactType(newType);
                 existing.setCreatedAt(Instant.now());
                 reactRepository.save(existing);
+                isNewReact = true;
             }
         } else {
             // Chưa có → thêm mới
@@ -71,11 +76,53 @@ public class ReactServiceImpl implements ReactService {
                             .createdAt(Instant.now())
                             .build()
             );
+            isNewReact = true;
         }
 
         // Cập nhật đếm (sử dụng countBy để không cần fetch all)
         long count = reactRepository.countByTargetIdAndTargetType(targetId, tType);
         updateTargetReactCount(tType, targetId, count);
+
+        // Gửi notification nếu là react mới và target là post/comment
+        if (isNewReact) {
+            switch (tType) {
+                case POST: {
+                    Post post = postRepository.findById(targetId)
+                            .orElseThrow(() -> new RuntimeException("Post not found after react"));
+
+                    notificationService.sendNotification(
+                            user,               // (actor)
+                            post.getAuthor(),   // (receiver)
+                            NotificationType.REACT_POST,
+                            post.getId(),       // (targetId)
+                            post.getId()        // (postId)
+                    );
+                    break;
+                }
+
+                case COMMENT: {
+                    Comment comment = commentRepository.findById(targetId)
+                            .orElseThrow(() -> new RuntimeException("Comment not found after react"));
+
+                    // Cần Post ID để tạo link
+                    Long postId = comment.getPost().getId();
+
+                    notificationService.sendNotification(
+                            user,                   // (actor)
+                            comment.getAuthor(),    // (receiver)
+                            NotificationType.REACT_COMMENT,
+                            comment.getId(),        // (targetId là ID của comment)
+                            postId                  // (postId để tạo link)
+                    );
+                    break;
+                }
+
+                // (Bạn có thể thêm case MESSAGE ở đây nếu cần)
+                default:
+                    // Không gửi thông báo cho các loại khác
+                    break;
+            }
+        }
 
         return ReactResponse.builder()
                 .targetId(targetId)

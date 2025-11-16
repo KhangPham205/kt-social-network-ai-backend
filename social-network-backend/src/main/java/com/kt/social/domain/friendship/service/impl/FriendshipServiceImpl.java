@@ -13,6 +13,8 @@ import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.friendship.service.FriendshipService;
 import com.kt.social.domain.message.dto.ConversationCreateRequest;
 import com.kt.social.domain.message.service.ConversationService;
+import com.kt.social.domain.notification.enums.NotificationType;
+import com.kt.social.domain.notification.service.NotificationService;
 import com.kt.social.domain.user.dto.UserProfileDto;
 import com.kt.social.domain.user.dto.UserRelationDto;
 import com.kt.social.domain.user.mapper.UserMapper;
@@ -39,6 +41,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     private final UserRepository userRepository;
     private final UserRelaRepository userRelaRepository;
     private final UserMapper userMapper;
+    private final NotificationService notificationService;
 
     // --------------------------- Friend Actions ---------------------------
 
@@ -80,6 +83,15 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 .status(FriendshipStatus.PENDING)
                 .build());
 
+        // Gửi notification cho người nhận
+        notificationService.sendNotification(
+                sender,   // (actor)
+                receiver, // (receiver)
+                NotificationType.FRIEND_REQUEST,
+                sender.getId(), // (targetId là ID người gửi)
+                null            // (không có post)
+        );
+
         return new FriendshipResponse("Friend request sent", FriendshipStatus.PENDING, userId, targetId);
     }
 
@@ -110,6 +122,14 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
 
         // Tạo conversation giữa 2 người khi là bạn bè
         conversationService.findOrCreateDirectConversation(senderId, receiverId);
+
+        notificationService.sendNotification(
+                receiver, // (actor - người chấp nhận)
+                sender,   // (receiver - người gửi lời mời)
+                NotificationType.FRIEND_ACCEPT,
+                receiver.getId(), // (targetId là ID người chấp nhận)
+                null              // (không có post)
+        );
 
         return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }

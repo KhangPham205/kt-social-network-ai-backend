@@ -1,14 +1,14 @@
 package com.kt.social.config;
 
 import com.kt.social.infra.websocket.JwtHandshakeInterceptor;
-import com.kt.social.infra.websocket.StompPrincipalInterceptor; // <-- Import interceptor của bạn
+import com.kt.social.infra.websocket.StompPrincipalInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker; // <-- THAY ĐỔI LỚN
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
-import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer; // <-- THAY ĐỔI LỚN
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -29,7 +29,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws", "/ws/chat", "/ws/notification")
                 .addInterceptors(jwtHandshakeInterceptor)
-                .setAllowedOrigins("*");
+                .setAllowedOriginPatterns("*")
+        .withSockJS();
     }
 
     @Override

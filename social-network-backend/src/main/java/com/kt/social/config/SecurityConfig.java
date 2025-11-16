@@ -103,7 +103,6 @@ public class SecurityConfig {
                         // 1. Whitelist
                         .requestMatchers(ApiConstants.SWAGGER_WHITELIST).permitAll()
                         .requestMatchers(ApiConstants.PUBLIC_API_WHITELIST).permitAll()
-                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/files/**").permitAll()
 
                         // 2. Admin
@@ -150,7 +149,11 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(List.of(frontendBaseUrl));
+        config.setAllowedOrigins(List.of(
+                frontendBaseUrl,              // 1. Origin cho App React/Vue (Production)
+                "http://127.0.0.1:5500",      // 2. Origin cho file test HTML
+                "http://localhost:5500"
+        ));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setExposedHeaders(List.of("Authorization"));
