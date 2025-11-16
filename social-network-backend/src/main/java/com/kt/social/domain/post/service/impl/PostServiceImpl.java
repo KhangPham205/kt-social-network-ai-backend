@@ -31,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -93,7 +94,10 @@ public class PostServiceImpl implements PostService {
         Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
-        if (!post.getAuthor().getId().equals(currentUser.getId())) {
+        boolean isOwner = post.getAuthor().getId().equals(currentUser.getId());
+        boolean canUpdateAny = currentUserHasAuthority("POST:UPDATE");
+
+        if (!isOwner && !canUpdateAny) {
             throw new AccessDeniedException("You are not authorized to update this post.");
         }
 
@@ -269,11 +273,13 @@ public class PostServiceImpl implements PostService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
-        if (!post.getAuthor().getId().equals(currentUser.getId())) {
+        boolean isOwner = post.getAuthor().getId().equals(currentUser.getId());
+        boolean canDelete = currentUserHasAuthority("POST:DELETE_ANY");
+
+        if (!(isOwner || canDelete)) {
             throw new AccessDeniedException("You are not authorized to delete this post.");
         }
 
-        // Hủy liên kết share
         List<Post> shares = postRepository.findBySharedPost(post);
         shares.forEach(shared -> shared.setSharedPost(null));
         postRepository.saveAll(shares);
@@ -283,6 +289,16 @@ public class PostServiceImpl implements PostService {
 
     // --------------------- Helper methods -------------------------
 
+    private boolean currentUserHasAuthority(String authority) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getAuthorities() == null) {
+            return false;
+        }
+
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(authority));
+    }
+
     @Transactional(readOnly = true)
     protected PageVO<PostResponse> getPostResponsePageVO(User viewer, Page<Post> page) {
         List<Post> posts = page.getContent();
@@ -290,21 +306,14 @@ public class PostServiceImpl implements PostService {
             return PageVO.emptyPage(page); // Trả về trang rỗng
         }
 
-        // --- BATCH FETCH (LẤY HÀNG LOẠT) ---
-
-        // 1. Lấy ID
         List<Long> postIds = posts.stream().map(Post::getId).toList();
         Long viewerId = viewer.getId();
 
-        // 2. Lấy Reacts (Query 2)
-        // (Yêu cầu ReactService có hàm getReactSummaries(List<Long>, Long))
         Map<Long, ReactSummaryDto> reactMap = reactService.getReactSummaries(postIds, viewerId, TargetType.POST);
 
-        // 3. Lấy Share Counts (Query 3)
-        // (Yêu cầu PostRepository có hàm findShareCounts(List<Long>))
+
         Map<Long, Integer> shareCountMap = postRepository.findShareCounts(postIds);
 
-        // 4. Lấy Shared Posts (Query 4)
         List<Post> sharedPosts = posts.stream()
                 .map(Post::getSharedPost)
                 .filter(Objects::nonNull)
@@ -312,8 +321,7 @@ public class PostServiceImpl implements PostService {
         Map<Long, Post> sharedPostMap = sharedPosts.stream()
                 .collect(Collectors.toMap(Post::getId, Function.identity(), (a, b) -> a)); // (Map<SharedPostId, SharedPost>)
 
-        // 5. Kiểm tra quyền xem trên các shared post (in-memory)
-        // Map<SharedPostId, PostResponseDto>
+
         Map<Long, PostResponse> visibleSharedPostDtoMap = sharedPosts.stream()
                 .filter(sp -> canViewPost(viewer, sp)) // Chỉ giữ lại post xem được
                 .map(sp -> toDtoWithReactsAndShares(sp, viewerId)) // Map post xem được

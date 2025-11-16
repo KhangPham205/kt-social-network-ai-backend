@@ -10,6 +10,7 @@ import com.kt.social.common.constants.ApiConstants;
 import io.swagger.v3.oas.models.OpenAPI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -90,5 +91,11 @@ public class AuthController {
         } else {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP"));
         }
+    }
+
+    @PostMapping("/create-staff")
+    @PreAuthorize("hasAuthority('USER:CREATE')")
+    public ResponseEntity<RegisterResponse> createStaff(@RequestBody CreateStaffRequest request) {
+        return ResponseEntity.ok(authService.createStaffAccount(request));
     }
 }

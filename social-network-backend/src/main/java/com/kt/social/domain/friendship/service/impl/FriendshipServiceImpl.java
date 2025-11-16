@@ -130,6 +130,10 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     @Override
     @Transactional
     public FriendshipResponse unfriend(Long userId, Long friendId) {
+        if (userId.equals(friendId)) {
+            throw new BadRequestException("You cannot unfriend yourself");
+        }
+
         User u1 = getUser(userId);
         User u2 = getUser(friendId);
 

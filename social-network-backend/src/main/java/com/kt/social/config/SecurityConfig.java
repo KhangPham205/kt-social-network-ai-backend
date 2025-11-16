@@ -1,6 +1,5 @@
 package com.kt.social.config;
 
-// Các import cần thiết...
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kt.social.auth.security.JwtAuthenticationFilter;
 import com.kt.social.common.constants.ApiConstants;
@@ -11,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -100,8 +100,35 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        // 1. Whitelist
                         .requestMatchers(ApiConstants.SWAGGER_WHITELIST).permitAll()
                         .requestMatchers(ApiConstants.PUBLIC_API_WHITELIST).permitAll()
+                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/files/**").permitAll()
+
+                        // 2. Admin
+                        .requestMatchers("/api/v1/admin/**").hasAuthority("ADMIN:READ") // (Hoặc hasRole("ADMIN"))
+
+                        // 3. User API
+                        .requestMatchers(ApiConstants.USERS + "/**").authenticated()
+
+                        // 4. Post API
+                        .requestMatchers(HttpMethod.GET, ApiConstants.POSTS + "/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, ApiConstants.POSTS + "/create").hasAuthority("POST:CREATE")
+                        .requestMatchers(HttpMethod.POST, ApiConstants.POSTS + "/share").hasAuthority("POST:CREATE")
+                        .requestMatchers(HttpMethod.PUT, ApiConstants.POSTS + "/update").hasAuthority("POST:UPDATE")
+                        .requestMatchers(HttpMethod.DELETE, ApiConstants.POSTS + "/**").hasAuthority("POST:DELETE")
+
+                        // 5. Comment API
+                        .requestMatchers(HttpMethod.GET, ApiConstants.COMMENTS + "/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, ApiConstants.COMMENTS + "/create").hasAuthority("COMMENT:CREATE")
+                        .requestMatchers(HttpMethod.PUT, ApiConstants.COMMENTS + "/update").hasAuthority("COMMENT:UPDATE")
+                        .requestMatchers(HttpMethod.DELETE, ApiConstants.COMMENTS + "/**").hasAuthority("COMMENT:DELETE")
+
+                        // 6. Friendship API
+                        .requestMatchers(ApiConstants.FRIENDSHIP + "/**").authenticated()
+
+                        // 7. Quy tắc cuối cùng (Giữ nguyên)
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore((Filter) jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

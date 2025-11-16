@@ -10,4 +10,5 @@ public interface AuthService {
     void sendVerificationCode(String email);
     void resendVerificationCode(String email);
     boolean verifyOtp(OtpVerificationRequest request);
+    RegisterResponse createStaffAccount(CreateStaffRequest request);
 }

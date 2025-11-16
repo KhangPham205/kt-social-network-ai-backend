@@ -10,6 +10,7 @@ import com.kt.social.domain.comment.mapper.CommentMapper;
 import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.comment.service.CommentService;
+import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.dto.ReactSummaryDto;
@@ -22,6 +23,7 @@ import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +38,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CommentServiceImpl implements CommentService {
 
+    private final FriendshipRepository friendshipRepository;
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final CommentMapper commentMapper;
@@ -50,6 +53,8 @@ public class CommentServiceImpl implements CommentService {
         User author = userService.getCurrentUser();
         Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+        checkViewPermission(author, post);
 
         Comment parent = null;
         if (request.getParentId() != null) {
@@ -87,8 +92,11 @@ public class CommentServiceImpl implements CommentService {
         Comment comment = commentRepository.findById(request.getCommentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
-        if (!comment.getAuthor().getId().equals(current.getId())) {
-            throw new AccessDeniedException("You can only edit your own comment");
+        boolean isOwner = comment.getAuthor().getId().equals(current.getId());
+        boolean canUpdate = currentUserHasAuthority("COMMENT:UPDATE");
+
+        if (!(isOwner || canUpdate)) {
+            throw new AccessDeniedException("You are not authorized to update this comment.");
         }
 
         // Cập nhật nội dung nếu có
@@ -142,6 +150,8 @@ public class CommentServiceImpl implements CommentService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
+        checkViewPermission(currentUser, post);
+
         Page<Comment> rootComments = commentRepository.findByPostAndParentIsNull(post, pageable);
 
         return buildPageVO(rootComments, currentUser.getId(), 0);
@@ -169,8 +179,15 @@ public class CommentServiceImpl implements CommentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
         User current = userService.getCurrentUser();
-        if (!comment.getAuthor().getId().equals(current.getId())) {
-            throw new AccessDeniedException("You can only delete your own comment");
+
+        boolean isOwner = comment.getAuthor().getId().equals(current.getId());
+        boolean canDelete = currentUserHasAuthority("COMMENT:DELETE");
+        boolean canDeleteAny = currentUserHasAuthority("COMMENT:DELETE_ANY");
+
+        if ((isOwner && canDelete) || canDeleteAny) {
+
+        } else {
+            throw new AccessDeniedException("You are not authorized to delete this comment.");
         }
 
         commentRepository.delete(comment);
@@ -252,6 +269,42 @@ public class CommentServiceImpl implements CommentService {
         }
 
         return dto;
+    }
+
+    private boolean currentUserHasAuthority(String authority) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getAuthorities() == null) {
+            return false;
+        }
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(authority));
+    }
+
+    /**
+     * HELPER 2: Kiểm tra quyền XEM POST (sao chép từ PostService)
+     * Ném Exception nếu không có quyền
+     */
+    private void checkViewPermission(User viewer, Post post) {
+        User author = post.getAuthor();
+
+        boolean isOwner = viewer.getId().equals(author.getId());
+        boolean canReadAny = currentUserHasAuthority("POST:READ_ANY"); // (Quyền Admin)
+
+        if (isOwner || canReadAny) {
+            return; // Chủ sở hữu hoặc Admin/Mod -> luôn xem được
+        }
+
+        switch (post.getAccessModifier()) {
+            case PRIVATE:
+                throw new AccessDeniedException("You don't have permission to view this private post");
+            case FRIENDS:
+                if (!friendshipRepository.existsActiveFriendship(author, viewer)) {
+                    throw new AccessDeniedException("Only friends can view this post");
+                }
+                break;
+            case PUBLIC:
+                break;
+        }
     }
 
     private boolean isVideo(String ext) {

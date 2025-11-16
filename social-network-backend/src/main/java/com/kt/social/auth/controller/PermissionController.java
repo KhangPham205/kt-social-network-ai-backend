@@ -1,5 +1,6 @@
 package com.kt.social.auth.controller;
 
+import com.kt.social.auth.dto.PermissionRequest;
 import com.kt.social.auth.model.Permission;
 import com.kt.social.auth.service.PermissionService;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,7 @@ public class PermissionController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
-    public ResponseEntity<Permission> create(@RequestBody Permission permission) {
+    public ResponseEntity<Permission> create(@RequestBody PermissionRequest permission) {
         return ResponseEntity.ok(permissionService.create(permission));
     }
 
@@ -30,7 +31,7 @@ public class PermissionController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
-    public ResponseEntity<Permission> update(@PathVariable Long id, @RequestBody Permission permission) {
+    public ResponseEntity<Permission> update(@PathVariable Long id, @RequestBody PermissionRequest permission) {
         return ResponseEntity.ok(permissionService.update(id, permission));
     }
 

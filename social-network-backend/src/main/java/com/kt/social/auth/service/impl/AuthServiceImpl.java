@@ -183,16 +183,69 @@ public class AuthServiceImpl implements AuthService {
         };
     }
 
+    @Override
+    @Transactional
+    public RegisterResponse createStaffAccount(CreateStaffRequest request) {
+        if (userCredentialRepository.existsByUsername(request.getUsername())) {
+            throw new BadRequestException("Username is already in use");
+        }
+
+        // 1. Tìm Role dựa trên request (thay vì hard-code "USER")
+        Role staffRole = roleRepository.findByName(request.getRoleName().toUpperCase())
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + request.getRoleName()));
+
+        Set<Role> initialRoles = new HashSet<>();
+        initialRoles.add(staffRole);
+
+        UserCredential userCredential = UserCredential.builder()
+                .username(request.getUsername())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .email(request.getEmail())
+                .roles(initialRoles)
+                .status(AccountStatus.ACTIVE) // <-- Kích hoạt ngay
+                .build();
+
+        userCredentialRepository.save(userCredential);
+
+        // 2. Tạo User profile
+        com.kt.social.domain.user.model.User user = com.kt.social.domain.user.model.User.builder()
+                .displayName(request.getFullname())
+                .isActive(true)
+                .credential(userCredential)
+                .build();
+
+        userRepository.save(user);
+
+        // 3. Tạo UserInfo (với các trường mặc định)
+        UserInfo userInfo = UserInfo.builder()
+                .bio("Tài khoản nhân viên.")
+                .favorites("")
+                .user(user)
+                .build();
+
+        userInfoRepository.save(userInfo);
+
+        return new RegisterResponse("Staff account created successfully");
+    }
+
     // --------------------- Helper methods --------------------------
     private UserDetails buildUserDetails(UserCredential userCredential) {
         Set<Role> roles = userCredential.getRoles();
-        String[] roleNames = roles.stream()
-                .map(Role::getName)
-                .toArray(String[]::new);
+        Set<String> roleNames = new HashSet<>();
+        Set<String> permissionNames = new HashSet<>();
+
+        for (Role role : roles) {
+            roleNames.add(role.getName().replace("ROLE_", ""));
+
+            role.getPermissions().forEach(permission ->
+                    permissionNames.add(permission.getName())
+            );
+        }
 
         return User.withUsername(userCredential.getUsername())
                 .password(userCredential.getPassword())
-                .roles(roleNames)
+                .roles(roleNames.toArray(new String[0])) // Gán các Role
+                .authorities(permissionNames.toArray(new String[0])) // Gán các Permission
                 .build();
     }
 

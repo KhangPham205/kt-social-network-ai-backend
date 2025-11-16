@@ -1,20 +1,22 @@
 package com.kt.social.domain.user.model;
 
-import com.kt.social.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
-import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
-import java.time.LocalDate;
 
 @Entity
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@SuperBuilder
-public class UserInfo extends BaseEntity {
+@Builder
+public class UserInfo {
+
+    @Id
+    private Long id;
 
     private String bio;
 
@@ -22,7 +24,18 @@ public class UserInfo extends BaseEntity {
 
     private Instant dateOfBirth;
 
-    @OneToOne
-    @JoinColumn(name = "user_id", referencedColumnName = "id")
+    @OneToOne(fetch = FetchType.LAZY)
+    @MapsId
+    @JoinColumn(name = "id")
     private User user;
+
+    @CreationTimestamp
+    private Instant createdAt;
+
+    private String createdBy;
+
+    @UpdateTimestamp
+    private Instant updatedAt;
+
+    private String updatedBy;
 }

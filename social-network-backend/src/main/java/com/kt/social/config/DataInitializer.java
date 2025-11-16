@@ -1,5 +1,6 @@
 package com.kt.social.config;
 
+// ... (Các import của bạn giữ nguyên)
 import com.kt.social.auth.model.Permission;
 import com.kt.social.auth.model.Role;
 import com.kt.social.auth.model.UserCredential;
@@ -47,17 +48,37 @@ public class DataInitializer {
         Role adminRole = findOrCreateRole("ADMIN", "Administrator role");
         Role moderatorRole = findOrCreateRole("MODERATOR", "Moderation role");
 
-        Permission createPost = findOrCreatePermission("CREATE_POST", "Create a new post");
-        Permission deletePost = findOrCreatePermission("DELETE_POST", "Delete a post");
-        Permission comment = findOrCreatePermission("COMMENT", "Comment on a post");
+        Permission createPost = findOrCreatePermission("POST", "CREATE", "Create a new post");
+        Permission updatePost = findOrCreatePermission("POST", "UPDATE", "Update own post");
+        Permission deletePost = findOrCreatePermission("POST", "DELETE", "Delete own post");
+        Permission createComment = findOrCreatePermission("COMMENT", "CREATE", "Create a comment");
+        Permission updateComment = findOrCreatePermission("COMMENT", "UPDATE", "Update own comment");
+        Permission deleteComment = findOrCreatePermission("COMMENT", "DELETE", "Delete own comment");
 
-        assignPermissions(userRole, Set.of(createPost, comment));
-        assignPermissions(adminRole, Set.of(createPost, deletePost, comment));
-        assignPermissions(moderatorRole, Set.of(createPost, deletePost, comment));
+        Permission deleteAnyPost = findOrCreatePermission("POST", "DELETE_ANY", "Delete any post");
+        Permission deleteAnyComment = findOrCreatePermission("COMMENT", "DELETE_ANY", "Delete any comment");
+        Permission readAdminDashboard = findOrCreatePermission("ADMIN", "READ", "Access Admin Dashboard");
+        Permission createStaff = findOrCreatePermission("USER", "CREATE", "Create new Staff Account (Admin/Mod)");
+        Permission deleteUser = findOrCreatePermission("USER", "DELETE", "Delete any User Account");
+
+        assignPermissions(userRole, Set.of(
+                createPost, updatePost, deletePost,
+                createComment, updateComment, deleteComment
+        ));
+
+        assignPermissions(moderatorRole, Set.of(
+                deleteAnyPost, deleteAnyComment
+        ));
+
+        assignPermissions(adminRole, Set.of(
+                createPost, updatePost, deletePost,
+                createComment, updateComment, deleteComment,
+                deleteAnyPost, deleteAnyComment,
+                readAdminDashboard, createStaff, deleteUser
+        ));
 
         if (!userCredentialRepository.existsByUsername(adminUsername)) {
 
-            // 1. Tạo Credential (Chưa save)
             UserCredential adminCredential = UserCredential.builder()
                     .username(adminUsername)
                     .email("admin@social.local")
@@ -66,20 +87,17 @@ public class DataInitializer {
                     .status(AccountStatus.ACTIVE)
                     .build();
 
-            // 2. Tạo User (Profile) (Chưa save)
             User adminUser = User.builder()
                     .displayName("Administrator")
                     .isActive(true)
                     .build();
 
-            // 3. Tạo UserInfo (Chưa save)
             UserInfo adminInfo = UserInfo.builder()
                     .bio("Tài khoản quản trị viên")
                     .build();
 
             adminCredential.setUser(adminUser);
             adminUser.setCredential(adminCredential);
-
             adminUser.setUserInfo(adminInfo);
             adminInfo.setUser(adminUser);
 
@@ -95,45 +113,45 @@ public class DataInitializer {
     // -------------------- Helper methods --------------------
 
     private Role findOrCreateRole(String name, String description) {
-        return roleRepository.findByName(name)
+        return roleRepository.findByName(name.toUpperCase())
                 .orElseGet(() -> {
                     Role newRole = Role.builder()
-                            .name(name)
+                            .name(name.toUpperCase())
                             .description(description)
                             .build();
                     roleRepository.save(newRole);
-                    System.out.println("🟢 Created role: " + name);
+                    System.out.println("🟢 Created role: " + name.toUpperCase());
                     return newRole;
                 });
     }
 
-    private Permission findOrCreatePermission(String name, String description) {
+    private Permission findOrCreatePermission(String resource, String action, String description) {
+        String name = resource.toUpperCase() + ":" + action.toUpperCase();
         return permissionRepository.findByName(name)
                 .orElseGet(() -> {
                     Permission newPerm = Permission.builder()
-                            .name(name)
+                            .resource(resource.toUpperCase())
+                            .action(action.toUpperCase())
+                            .name(name) // Tên chuẩn hóa
                             .description(description)
                             .build();
                     permissionRepository.save(newPerm);
-                    System.out.println("Created permission: " + name);
+                    System.out.println("🟢 Created permission: " + name);
                     return newPerm;
                 });
     }
 
     private void assignPermissions(Role role, Set<Permission> permissions) {
         boolean updated = false;
-
         if (role.getPermissions() == null) {
             role.setPermissions(new HashSet<>());
         }
-
         for (Permission permission : permissions) {
             if (!role.getPermissions().contains(permission)) {
                 role.getPermissions().add(permission);
                 updated = true;
             }
         }
-
         if (updated) {
             roleRepository.save(role);
             System.out.println("Updated permissions for role: " + role.getName());
