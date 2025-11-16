@@ -25,7 +25,7 @@ public class ConversationController {
         return ResponseEntity.ok(conversationService.createConversation(req));
     }
 
-    @PutMapping(value = "/{conversationId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ConversationSummaryResponse> updateConversation(
             @ModelAttribute UpdateConversationRequest request
     ) {
@@ -35,7 +35,7 @@ public class ConversationController {
         );
     }
 
-    @PostMapping("/{conversationId}/members")
+    @PostMapping("/addMembers")
     public ResponseEntity<ConversationSummaryResponse> addMembers(
             @RequestBody AddMembersRequest request
     ) {
@@ -56,7 +56,7 @@ public class ConversationController {
         );
     }
 
-    @PutMapping("/{conversationId}/members/{userIdToChange}/role")
+    @PutMapping("/updateRoleMember")
     public ResponseEntity<ConversationSummaryResponse> updateMemberRole(
             @RequestBody UpdateMemberRoleRequest request
     ) {
