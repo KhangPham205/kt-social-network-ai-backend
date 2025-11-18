@@ -149,8 +149,12 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationMember currentUserMember = checkGroupAndGetMember(request.getConversationId(), currentUserId);
         Conversation conversation = currentUserMember.getConversation();
 
+        if (!conversation.getIsGroup()) {
+            throw new BadRequestException("You cannot add a member to 1-1 conversation");
+        }
+
         if (currentUserMember.getRole() == ConversationRole.MEMBER) {
-            throw new AccessDeniedException("Chỉ chủ nhóm (hoặc phó nhóm) mới có quyền thêm thành viên.");
+            throw new AccessDeniedException("Only OWNER or ADMIN can add a new member");
         }
 
         Set<Long> existingMemberIds = conversation.getMembers().stream()
@@ -182,7 +186,7 @@ public class ConversationServiceImpl implements ConversationService {
         // 🔥 LƯU SYSTEM MESSAGE: Thêm thành viên
         String addedNames = newUsers.stream().map(User::getDisplayName).collect(Collectors.joining(", "));
         saveAndSendSystemMessage(conversation, currentUserMember.getUser(),
-                currentUserMember.getUser().getDisplayName() + " đã thêm " + addedNames + " vào nhóm.");
+                currentUserMember.getUser().getDisplayName() + " added " + addedNames + " into group.");
 
         Conversation updatedConvo = conversationRepository.findById(request.getConversationId()).get();
         return toConversationSummaryDto(updatedConvo, currentUserId);
@@ -216,7 +220,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         // 🔥 LƯU SYSTEM MESSAGE: Xóa thành viên
         saveAndSendSystemMessage(conversation, currentUserMember.getUser(),
-                currentUserMember.getUser().getDisplayName() + " đã xóa " + removedUserName + " khỏi nhóm.");
+                currentUserMember.getUser().getDisplayName() + " deleted " + removedUserName + " from the group.");
 
         Conversation updatedConvo = conversationRepository.findById(conversationId).get();
         return toConversationSummaryDto(updatedConvo, currentUserId);
