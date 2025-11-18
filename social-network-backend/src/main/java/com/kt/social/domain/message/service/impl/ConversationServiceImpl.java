@@ -15,6 +15,7 @@ import com.kt.social.domain.message.repository.ConversationRepository;
 import com.kt.social.domain.message.service.ConversationService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
+import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,14 +33,14 @@ public class ConversationServiceImpl implements ConversationService {
     private final ConversationRepository conversationRepository;
     private final ConversationMemberRepository memberRepository;
     private final UserRepository userRepository;
-    private final UserCredentialRepository credRepo;
     private final ConversationMemberRepository conversationMemberRepository;
     private final StorageService storageService;
+    private final UserService userService;
 
     @Override
     @Transactional
     public ConversationResponse createConversation(ConversationCreateRequest req) {
-        User creator = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User creator = userService.getCurrentUser();
 
         String mediaUrl = null;
         if (req.getMedia() != null && !req.getMedia().isEmpty()) {

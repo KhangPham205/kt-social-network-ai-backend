@@ -1,18 +1,16 @@
 // MessageServiceImpl.java
 package com.kt.social.domain.message.service.impl;
 
-import com.kt.social.auth.repository.UserCredentialRepository;
-import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.constants.WebSocketConstants;
 import com.kt.social.common.vo.CursorPage;
 import com.kt.social.domain.message.dto.MessageRequest;
 import com.kt.social.domain.message.dto.MessageResponse;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
-import com.kt.social.domain.message.repository.ConversationMemberRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.message.service.MessageService;
+import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -28,14 +26,13 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements MessageService {
 
     private final ConversationRepository conversationRepository;
-    private final ConversationMemberRepository memberRepository;
     private final StorageService storageService;
     private final UserRepository userRepository;
-    private final UserCredentialRepository credRepo;
     private final SimpMessagingTemplate messagingTemplate;
 
     // lightweight lock per conversation to avoid concurrent list corruption
     private final Map<Long, Object> convoLocks = new ConcurrentHashMap<>();
+    private final UserService userService;
 
     private Object getLock(Long convoId) {
         return convoLocks.computeIfAbsent(convoId, id -> new Object());
@@ -44,7 +41,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public Map<String, Object> sendMessage(MessageRequest req) {
-        User sender = SecurityUtils.getCurrentUser(credRepo, userRepository);
+        User sender = userService.getCurrentUser();
         return createAndSaveMessage(sender.getId(), sender.getDisplayName(), sender.getAvatarUrl(),
                 req.getConversationId(), req.getContent(), req.getReplyToId(), req.getMediaFiles());
     }
