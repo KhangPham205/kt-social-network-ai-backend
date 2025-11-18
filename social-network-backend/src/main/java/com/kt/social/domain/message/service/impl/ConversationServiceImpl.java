@@ -104,13 +104,13 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional
     public ConversationSummaryResponse updateConversation(Long currentUserId, UpdateConversationRequest request) {
         ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(request.getConversationId(), currentUserId)
-                .orElseThrow(() -> new AccessDeniedException("Bạn không phải là thành viên của cuộc hội thoại này."));
+                .orElseThrow(() -> new AccessDeniedException("You are not a member of this conversation."));
 
         Conversation conversation = member.getConversation();
 
         // Kiểm tra nghiệp vụ: Đây có phải là nhóm không?
         if (conversation.getIsGroup() == null || !conversation.getIsGroup()) {
-            throw new BadRequestException("Chỉ có thể cập nhật thông tin cho chat nhóm.");
+            throw new BadRequestException("Can only update group conversations.");
         }
 
         // Kiểm tra quyền: Bạn có phải là OWNER không?
@@ -143,12 +143,12 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationSummaryResponse addMembersToGroup(Long currentUserId, AddMembersRequest request) {
 
         ConversationMember currentUserMember = conversationMemberRepository.findByConversationIdAndUserId(request.getConversationId(), currentUserId)
-                .orElseThrow(() -> new AccessDeniedException("Bạn không phải là thành viên của cuộc hội thoại này."));
+                .orElseThrow(() -> new AccessDeniedException("You are not a member of this conversation."));
 
         Conversation conversation = currentUserMember.getConversation();
 
         if (conversation.getIsGroup() == null || !conversation.getIsGroup()) {
-            throw new BadRequestException("Chỉ có thể thêm thành viên vào chat nhóm.");
+            throw new BadRequestException("Can only add members to group conversations.");
         }
 
         // Kiểm tra quyền: Bạn có phải là OWNER/ADMIN không?
@@ -173,7 +173,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         List<User> newUsers = userRepository.findByIdIn(newMemberIds);
         if (newUsers.size() != newMemberIds.size()) {
-            throw new ResourceNotFoundException("Một số user ID không hợp lệ.");
+            throw new ResourceNotFoundException("Some users to add were not found.");
         }
 
         List<ConversationMember> newMembers = newUsers.stream()
@@ -203,11 +203,11 @@ public class ConversationServiceImpl implements ConversationService {
 
         // 2. Lấy member bị xóa
         ConversationMember targetMember = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userIdToRemove)
-                .orElseThrow(() -> new ResourceNotFoundException("Thành viên này không tồn tại trong nhóm."));
+                .orElseThrow(() -> new ResourceNotFoundException("This member does not exist in the group."));
 
         // 3. Kiểm tra logic: không thể tự xóa mình
         if (currentUserId.equals(userIdToRemove)) {
-            throw new BadRequestException("Bạn không thể tự xóa mình. Hãy dùng chức năng 'Rời nhóm'.");
+            throw new BadRequestException("You cannot remove yourself from the group using this method.");
         }
 
         // 4. Kiểm tra quyền
@@ -216,17 +216,17 @@ public class ConversationServiceImpl implements ConversationService {
 
         // Chỉ OWNER hoặc ADMIN mới có quyền xóa
         if (currentUserRole == ConversationRole.MEMBER) {
-            throw new AccessDeniedException("Chỉ chủ nhóm hoặc phó nhóm mới có quyền xóa thành viên.");
+            throw new AccessDeniedException("Only OWNER or ADMIN can remove members.");
         }
 
         // Không ai được xóa OWNER
         if (targetUserRole == ConversationRole.OWNER) {
-            throw new AccessDeniedException("Không thể xóa chủ nhóm.");
+            throw new AccessDeniedException("Cannot remove the OWNER of the group.");
         }
 
         // ADMIN không thể xóa ADMIN khác
         if (currentUserRole == ConversationRole.ADMIN && targetUserRole == ConversationRole.ADMIN) {
-            throw new AccessDeniedException("Phó nhóm không thể xóa phó nhóm khác.");
+            throw new AccessDeniedException("Vice Admin cannot remove another Admin.");
         }
 
         // 5. Xóa
@@ -250,20 +250,20 @@ public class ConversationServiceImpl implements ConversationService {
 
         // Lấy member bị thay đổi
         ConversationMember targetMember = conversationMemberRepository.findByConversationIdAndUserId(request.getConversationId(), request.getUserIdToChange())
-                .orElseThrow(() -> new ResourceNotFoundException("Thành viên này không tồn tại trong nhóm."));
+                .orElseThrow(() -> new ResourceNotFoundException("This member does not exist in the group."));
 
         // Validate vai trò mới (Không được phép gán OWNER)
         if (request.getNewRole() == null || request.getNewRole() == ConversationRole.OWNER) {
-            throw new BadRequestException("Vai trò không hợp lệ. Chỉ có thể gán 'ADMIN' hoặc 'MEMBER'.");
+            throw new BadRequestException("Invalid role specified. Can only assign ADMIN or MEMBER roles.");
         }
 
         // Kiểm tra quyền: Chỉ OWNER/ADMIN mới được làm
         if (currentUserMember.getRole() == ConversationRole.MEMBER) {
-            throw new AccessDeniedException("Chỉ chủ/phó nhóm mới có quyền thay đổi vai trò thành viên.");
+            throw new AccessDeniedException("Only OWNER or ADMIN can change member roles.");
         }
 
         if (targetMember.getRole() == ConversationRole.OWNER) {
-            throw new BadRequestException("Không thể thay đổi vai trò của chủ nhóm.");
+            throw new BadRequestException("Cannot change role of the OWNER.");
         }
 
         targetMember.setRole(request.getNewRole());
@@ -290,6 +290,23 @@ public class ConversationServiceImpl implements ConversationService {
                 .filter(c -> c != null && processedConversationIds.add(c.getId()))
                 .map(c -> toConversationSummaryDto(c, userId))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ConversationSummaryResponse getConversationById(Long currentUserId, Long conversationId) {
+
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        boolean isMember = conversation.getMembers().stream()
+                .anyMatch(m -> m.getUser().getId().equals(currentUserId));
+
+        if (!isMember) {
+            throw new AccessDeniedException("You are not a member of this conversation.");
+        }
+
+        return toConversationSummaryDto(conversation, currentUserId);
     }
 
     @Override
@@ -348,16 +365,6 @@ public class ConversationServiceImpl implements ConversationService {
 
         memberRepository.save(cmA);
         memberRepository.save(cmB);
-
-        List<Long> memberIds = List.of(a.getId(), b.getId());
-        ConversationResponse.builder()
-                .id(saved.getId())
-                .isGroup(saved.getIsGroup())
-                .title(saved.getTitle())
-                .mediaUrl(saved.getMediaUrl())
-                .createdAt(saved.getCreatedAt())
-                .memberIds(memberIds)
-                .build();
     }
 
     // -------------------------HELPER METHODS-------------------------
@@ -407,7 +414,7 @@ public class ConversationServiceImpl implements ConversationService {
 
     private ConversationMember checkGroupAndGetMember(Long conversationId, Long userId) {
         ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
-                .orElseThrow(() -> new AccessDeniedException("Bạn không phải là thành viên của cuộc hội thoại này."));
+                .orElseThrow(() -> new AccessDeniedException("You are not a member of this conversation."));
 
         Conversation convo = member.getConversation();
         if (convo == null) { // Đảm bảo convo được load
@@ -417,7 +424,7 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         if (convo.getIsGroup() == null || !convo.getIsGroup()) {
-            throw new BadRequestException("Hành động này chỉ áp dụng cho chat nhóm.");
+            throw new BadRequestException("This action is only allowed in group conversations.");
         }
         return member;
     }

@@ -71,4 +71,14 @@ public class ConversationController {
         Long userId = userService.getCurrentUser().getId();
         return ResponseEntity.ok(conversationService.getUserConversations(userId));
     }
+
+    @GetMapping("/{conversationId}")
+    public ResponseEntity<ConversationSummaryResponse> getConversationById(
+            @PathVariable Long conversationId
+    ) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(
+                conversationService.getConversationById(currentUserId, conversationId)
+        );
+    }
 }
