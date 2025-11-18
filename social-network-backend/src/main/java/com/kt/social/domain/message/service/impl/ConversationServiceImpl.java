@@ -455,7 +455,7 @@ public class ConversationServiceImpl implements ConversationService {
         messageMap.put("senderName", sender.getDisplayName());
         messageMap.put("content", content);
         messageMap.put("type", MessageType.SYSTEM.name());
-        messageMap.put("timestamp", Instant.now().toString());
+        messageMap.put("createdAt", Instant.now().toString());
 
         if (conversation.getMessages() == null) {
             conversation.setMessages(new ArrayList<>());
