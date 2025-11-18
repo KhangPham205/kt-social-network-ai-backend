@@ -41,10 +41,10 @@ public final class SecurityUtils {
             UserCredentialRepository credRepo,
             UserRepository userRepo
     ) {
-        String username = getCurrentUsername()
+        String id = getCurrentUsername()
                 .orElseThrow(() -> new RuntimeException("User not authenticated"));
 
-        UserCredential cred = credRepo.findByUsername(username)
+        UserCredential cred = credRepo.findById(Long.parseLong(id))
                 .orElseThrow(() -> new RuntimeException("Credential not found"));
 
         return userRepo.findByCredential(cred);

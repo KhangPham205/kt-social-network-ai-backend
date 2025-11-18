@@ -20,8 +20,8 @@ public class ConversationController {
     private final ConversationService conversationService;
     private final UserService userService;
 
-    @PostMapping
-    public ResponseEntity<ConversationResponse> create(@RequestBody ConversationCreateRequest req) {
+    @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ConversationResponse> create(@ModelAttribute ConversationCreateRequest req) {
         return ResponseEntity.ok(conversationService.createConversation(req));
     }
 
