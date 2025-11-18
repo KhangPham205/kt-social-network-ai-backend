@@ -23,4 +23,6 @@ public interface ConversationMemberRepository extends JpaRepository<Conversation
             "WHERE cm.user.id = :userId " +
             "ORDER BY c.updatedAt DESC")     // Sắp xếp theo tin nhắn mới nhất
     List<ConversationMember> findConversationsByUserId(@Param("userId") Long userId);
+
+    long countByConversationId(Long conversationId);
 }

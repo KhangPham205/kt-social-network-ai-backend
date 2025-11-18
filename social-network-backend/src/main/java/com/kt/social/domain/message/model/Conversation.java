@@ -33,7 +33,7 @@ public class Conversation {
     private Set<ConversationMember> members;
 
     /**
-     * 🔹 Lưu tất cả message dạng JSONB
+     * Lưu tất cả message dạng JSONB
      * Cấu trúc:
      * [
      *   {
