@@ -20,8 +20,8 @@ public class ConversationController {
     private final ConversationService conversationService;
     private final UserService userService;
 
-    @PostMapping
-    public ResponseEntity<ConversationResponse> create(@RequestBody ConversationCreateRequest req) {
+    @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ConversationResponse> create(@ModelAttribute ConversationCreateRequest req) {
         return ResponseEntity.ok(conversationService.createConversation(req));
     }
 
@@ -70,5 +70,15 @@ public class ConversationController {
     public ResponseEntity<List<ConversationSummaryResponse>> myConversations(Principal principal) {
         Long userId = userService.getCurrentUser().getId();
         return ResponseEntity.ok(conversationService.getUserConversations(userId));
+    }
+
+    @GetMapping("/{conversationId}")
+    public ResponseEntity<ConversationSummaryResponse> getConversationById(
+            @PathVariable Long conversationId
+    ) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(
+                conversationService.getConversationById(currentUserId, conversationId)
+        );
     }
 }

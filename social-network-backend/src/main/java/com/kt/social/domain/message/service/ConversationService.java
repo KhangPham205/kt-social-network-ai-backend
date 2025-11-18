@@ -12,6 +12,6 @@ public interface ConversationService {
     ConversationSummaryResponse removeMemberFromGroup(Long currentUserId, Long conversationId, Long userIdToRemove);
     ConversationSummaryResponse updateMemberRole(Long currentUserId, UpdateMemberRoleRequest request);
     List<ConversationSummaryResponse> getUserConversations(Long userId);
+    ConversationSummaryResponse getConversationById(Long currentUserId, Long conversationId);
     void findOrCreateDirectConversation(Long userAId, Long userBId);
-
 }
