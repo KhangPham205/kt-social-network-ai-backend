@@ -392,12 +392,12 @@ public class ConversationServiceImpl implements ConversationService {
                 : null;
 
         List<ParticipantDto> participants = c.getMembers().stream()
-                .map(ConversationMember::getUser)
-                .filter(Objects::nonNull)
-                .map(u -> ParticipantDto.builder()
-                        .id(u.getId())
-                        .displayName(u.getDisplayName())
-                        .avatarUrl(u.getAvatarUrl())
+                .filter(m -> m.getUser() != null)
+                .map(m -> ParticipantDto.builder()
+                        .id(m.getUser().getId())
+                        .displayName(m.getUser().getDisplayName())
+                        .avatarUrl(m.getUser().getAvatarUrl())
+                        .role(m.getRole() != null ? m.getRole().name() : "MEMBER")
                         .build())
                 .toList();
 
