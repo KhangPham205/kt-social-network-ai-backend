@@ -82,7 +82,9 @@ public class MessageServiceImpl implements MessageService {
         message.put("media", media);
         message.put("createdAt", Instant.now().toString());
         message.put("reactions", new ArrayList<>()); // initially empty
-        message.put("isRead", false);
+        List<Long> readBy = new ArrayList<>();
+        readBy.add(senderId); // Người gửi coi như đã đọc tin của chính mình (tùy chọn)
+        message.put("readBy", readBy);
 
         synchronized (getLock(conversationId)) {
             List<Map<String,Object>> messages = convo.getMessages() != null

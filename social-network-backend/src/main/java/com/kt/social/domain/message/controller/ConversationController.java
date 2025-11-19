@@ -45,6 +45,16 @@ public class ConversationController {
         );
     }
 
+    @PutMapping("/updateRoleMember")
+    public ResponseEntity<ConversationSummaryResponse> updateMemberRole(
+            @RequestBody UpdateMemberRoleRequest request
+    ) {
+        Long currentUserId = userService.getCurrentUser().getId();
+        return ResponseEntity.ok(
+                conversationService.updateMemberRole(currentUserId, request)
+        );
+    }
+
     @DeleteMapping("/{conversationId}/members/{userIdToRemove}")
     public ResponseEntity<ConversationSummaryResponse> removeMember(
             @PathVariable Long conversationId,
@@ -56,14 +66,11 @@ public class ConversationController {
         );
     }
 
-    @PutMapping("/updateRoleMember")
-    public ResponseEntity<ConversationSummaryResponse> updateMemberRole(
-            @RequestBody UpdateMemberRoleRequest request
-    ) {
+    @DeleteMapping("/{conversationId}/leave")
+    public ResponseEntity<Void> leaveConversation(@PathVariable Long conversationId) {
         Long currentUserId = userService.getCurrentUser().getId();
-        return ResponseEntity.ok(
-                conversationService.updateMemberRole(currentUserId, request)
-        );
+        conversationService.leaveConversation(currentUserId, conversationId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")
