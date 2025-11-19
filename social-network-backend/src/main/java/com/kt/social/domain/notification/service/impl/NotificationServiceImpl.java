@@ -154,9 +154,6 @@ public class NotificationServiceImpl implements NotificationService {
         );
     }
 
-    // ... (Implement các hàm API: getMyNotifications, markAsRead, markAllAsRead) ...
-    // ... (Bạn có thể tự làm phần này, chúng khá giống PostService)
-
     /**
      * Helper để convert Entity -> DTO
      */
