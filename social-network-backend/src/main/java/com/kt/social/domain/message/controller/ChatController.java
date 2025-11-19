@@ -2,7 +2,9 @@ package com.kt.social.domain.message.controller;
 
 import com.kt.social.common.constants.WebSocketConstants;
 import com.kt.social.common.exception.BadRequestException;
+import com.kt.social.domain.message.dto.MarkReadRequest;
 import com.kt.social.domain.message.dto.MessageRequest;
+import com.kt.social.domain.message.service.ConversationService;
 import com.kt.social.domain.message.service.MessageService;
 import com.kt.social.domain.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import java.security.Principal;
 public class ChatController {
 
     private final MessageService messageService;
+    private final ConversationService conversationService;
     private final UserService userService;
 
     /**
@@ -60,5 +63,16 @@ public class ChatController {
     ) {
         headerAccessor.getSessionAttributes().put("username", messageRequest.getContent());
         return messageRequest.getContent() + " joined the chat";
+    }
+
+    /**
+     * Nhận sự kiện "Đã đọc" từ Client
+     */
+    @MessageMapping("/chat.read")
+    public void markAsRead(@Payload MarkReadRequest request, Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
+
+        // Gọi Service xử lý logic lưu DB
+        conversationService.markMessageAsRead(userId, request);
     }
 }

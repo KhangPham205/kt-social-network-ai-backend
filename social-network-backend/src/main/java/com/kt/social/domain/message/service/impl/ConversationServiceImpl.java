@@ -182,7 +182,6 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setUpdatedAt(Instant.now());
         conversationRepository.save(conversation);
 
-        // 🔥 LƯU SYSTEM MESSAGE: Thêm thành viên
         String addedNames = newUsers.stream().map(User::getDisplayName).collect(Collectors.joining(", "));
         saveAndSendSystemMessage(conversation, currentUserMember.getUser(),
                 currentUserMember.getUser().getDisplayName() + " added " + addedNames + " into group.");
@@ -385,6 +384,64 @@ public class ConversationServiceImpl implements ConversationService {
 
         memberRepository.save(cmA);
         memberRepository.save(cmB);
+    }
+
+    @Override
+    @Transactional
+    public void markMessageAsRead(Long userId, MarkReadRequest request) {
+        Conversation conversation = conversationRepository.findById(request.getConversationId())
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        boolean isMember = conversation.getMembers().stream()
+                .anyMatch(m -> m.getUser().getId().equals(userId));
+        if (!isMember)
+            throw new AccessDeniedException("You are not a member of this conversation.");
+
+        List<Map<String, Object>> messages = conversation.getMessages();
+        if (messages == null || messages.isEmpty()) return;
+
+        boolean isUpdated = false;
+
+        // Duyệt ngược từ dưới lên (vì thường người ta đọc tin mới nhất)
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Map<String, Object> msg = messages.get(i);
+            String msgId = (String) msg.get("id");
+
+            // Tìm đúng tin nhắn
+            if (msgId != null && msgId.equals(request.getMessageId())) {
+
+                // Lấy danh sách readBy hiện tại (hoặc tạo mới)
+                List<Long> readBy = (List<Long>) msg.get("readBy");
+                if (readBy == null) {
+                    readBy = new ArrayList<>();
+                    msg.put("readBy", readBy);
+                }
+
+                // Nếu chưa đọc thì thêm vào
+                // Lưu ý: List trong JSONB convert ra có thể là Integer hoặc Long tùy Hibernate, cần ép kiểu cẩn thận
+                boolean alreadyRead = readBy.stream().anyMatch(id -> id.toString().equals(userId.toString()));
+
+                if (!alreadyRead) {
+                    readBy.add(userId);
+                    isUpdated = true;
+
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("type", "EVENT_READ");
+                    payload.put("conversationId", conversation.getId());
+                    payload.put("messageId", msgId);
+                    payload.put("readerId", userId);
+                    payload.put("timestamp", Instant.now().toString());
+
+                    messagingTemplate.convertAndSend("/queue/conversation/" + conversation.getId(), payload);
+                }
+                break; // Tìm thấy rồi thì dừng
+            }
+        }
+
+        // 4. Lưu DB nếu có thay đổi
+        if (isUpdated) {
+            conversationRepository.save(conversation);
+        }
     }
 
     // -------------------------HELPER METHODS-------------------------

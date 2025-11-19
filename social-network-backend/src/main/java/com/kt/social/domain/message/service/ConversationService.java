@@ -16,4 +16,5 @@ public interface ConversationService {
     ConversationSummaryResponse getConversationById(Long currentUserId, Long conversationId);
     void findOrCreateDirectConversation(Long userAId, Long userBId);
 
+    void markMessageAsRead(Long userId, MarkReadRequest request);
 }
