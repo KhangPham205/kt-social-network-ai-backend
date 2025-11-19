@@ -90,7 +90,7 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         if (saved.getIsGroup()) {
-            saveAndSendSystemMessage(saved, creator, creator.getDisplayName() + " đã tạo nhóm.");
+            saveAndSendSystemMessage(saved, creator, creator.getDisplayName() + " created the group conversation.");
         }
 
         List<Long> memberIds = memberRepository.findByConversation(saved)
@@ -114,8 +114,8 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationMember member = checkGroupAndGetMember(request.getConversationId(), currentUserId);
         Conversation conversation = member.getConversation();
 
-        if (member.getRole() != ConversationRole.OWNER) {
-            throw new AccessDeniedException("Chỉ chủ nhóm mới có quyền cập nhật thông tin.");
+        if (member.getRole() == ConversationRole.MEMBER) {
+            throw new AccessDeniedException("Only OWNER or ADMIN can update group information.");
         }
 
         boolean isUpdated = false;
@@ -135,9 +135,8 @@ public class ConversationServiceImpl implements ConversationService {
             conversation.setUpdatedAt(Instant.now());
             conversationRepository.save(conversation);
 
-            // 🔥 LƯU SYSTEM MESSAGE: Cập nhật thông tin
             saveAndSendSystemMessage(conversation, member.getUser(),
-                    member.getUser().getDisplayName() + " đã cập nhật thông tin nhóm.");
+                    member.getUser().getDisplayName() + " updated the group information.");
         }
 
         return toConversationSummaryDto(conversation, currentUserId);
@@ -197,19 +196,19 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationSummaryResponse removeMemberFromGroup(Long currentUserId, Long conversationId, Long userIdToRemove) {
         ConversationMember currentUserMember = checkGroupAndGetMember(conversationId, currentUserId);
         ConversationMember targetMember = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userIdToRemove)
-                .orElseThrow(() -> new ResourceNotFoundException("Thành viên này không tồn tại trong nhóm."));
+                .orElseThrow(() -> new ResourceNotFoundException("This member does not exist in the group."));
 
         if (currentUserId.equals(userIdToRemove)) {
-            throw new BadRequestException("Bạn không thể tự xóa mình. Hãy dùng chức năng 'Rời nhóm'.");
+            throw new BadRequestException("You cannot remove yourself. Use leaveConversation instead.");
         }
 
         ConversationRole currentUserRole = currentUserMember.getRole();
         ConversationRole targetUserRole = targetMember.getRole();
 
-        if (currentUserRole == ConversationRole.MEMBER) throw new AccessDeniedException("Chỉ chủ/phó nhóm mới được xóa.");
-        if (targetUserRole == ConversationRole.OWNER) throw new AccessDeniedException("Không thể xóa chủ nhóm.");
+        if (currentUserRole == ConversationRole.MEMBER) throw new AccessDeniedException("Only OWNER or ADMIN can remove members.");
+        if (targetUserRole == ConversationRole.OWNER) throw new AccessDeniedException("Cannot remove the OWNER from the group.");
         if (currentUserRole == ConversationRole.ADMIN && targetUserRole == ConversationRole.ADMIN)
-            throw new AccessDeniedException("Phó nhóm không thể xóa phó nhóm khác.");
+            throw new AccessDeniedException("ADMIN cannot remove other ADMINs.");
 
         String removedUserName = targetMember.getUser().getDisplayName();
         conversationMemberRepository.delete(targetMember);
@@ -218,7 +217,6 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setUpdatedAt(Instant.now());
         conversationRepository.save(conversation);
 
-        // 🔥 LƯU SYSTEM MESSAGE: Xóa thành viên
         saveAndSendSystemMessage(conversation, currentUserMember.getUser(),
                 currentUserMember.getUser().getDisplayName() + " deleted " + removedUserName + " from the group.");
 
@@ -239,7 +237,7 @@ public class ConversationServiceImpl implements ConversationService {
             long memberCount = conversationMemberRepository.countByConversationId(conversationId);
 
             if (memberCount > 1) {
-                throw new BadRequestException("Bạn là chủ nhóm. Hãy chuyển quyền trước khi rời.");
+                throw new BadRequestException("You are the OWNER. Please transfer ownership or delete the group.");
             } else {
                 conversationRepository.delete(conversation);
                 // Nhóm giải tán -> Gửi sự kiện socket nhưng không lưu DB (vì DB đã xóa)
@@ -256,7 +254,7 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setUpdatedAt(Instant.now());
         conversationRepository.save(conversation);
 
-        saveAndSendSystemMessage(conversation, member.getUser(), leaverName + " đã rời nhóm.");
+        saveAndSendSystemMessage(conversation, member.getUser(), leaverName + " left the conversation.");
     }
 
     @Override
@@ -292,9 +290,9 @@ public class ConversationServiceImpl implements ConversationService {
 
         Conversation updatedConvo = conversationRepository.findById(request.getConversationId()).get();
 
-        String roleName = request.getNewRole() == ConversationRole.ADMIN ? "Phó nhóm" : "Thành viên";
+        String roleName = request.getNewRole() == ConversationRole.ADMIN ? "ADMIN" : "MEMBER";
         saveAndSendSystemMessage(currentUserMember.getConversation(), currentUserMember.getUser(),
-                targetMember.getUser().getDisplayName() + " đã được phân quyền làm " + roleName + ".");
+                targetMember.getUser().getDisplayName() + " was authorized to be " + roleName + ".");
 
         return toConversationSummaryDto(updatedConvo, currentUserId);
     }
@@ -419,7 +417,7 @@ public class ConversationServiceImpl implements ConversationService {
                 finalTitle = otherUser.getDisplayName();
                 finalMediaUrl = otherUser.getAvatarUrl();
             } else if (finalTitle == null) {
-                finalTitle = "Cuộc trò chuyện";
+                finalTitle = "Conversation";
             }
         }
 
@@ -452,7 +450,6 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private void saveAndSendSystemMessage(Conversation conversation, User sender, String content) {
-        // 1. Tạo Map Message (Cấu trúc JSON)
         Map<String, Object> messageMap = new HashMap<>();
         messageMap.put("id", UUID.randomUUID().toString());
         messageMap.put("senderId", sender.getId());
