@@ -360,7 +360,6 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                     .id(base.getId())
                     .displayName(base.getDisplayName())
                     .avatarUrl(base.getAvatarUrl())
-                    .isActive(base.getIsActive())
                     .bio(base.getBio())
                     .favorites(base.getFavorites())
                     .dateOfBirth(base.getDateOfBirth())
@@ -379,8 +378,8 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 .or(() -> friendshipRepository.findBySenderAndReceiver(target, viewer))
                 .map(f -> FriendshipResponse.builder()
                         .status(f.getStatus())
-                        .senderId(viewer.getId())
-                        .receiverId(target.getId())
+                        .senderId(f.getSender().getId())
+                        .receiverId(f.getReceiver().getId())
                         .build())
                 .orElse(FriendshipResponse.builder().build()); // Empty response if no friendship exists
 
@@ -391,7 +390,6 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 .id(base.getId())
                 .displayName(base.getDisplayName())
                 .avatarUrl(base.getAvatarUrl())
-                .isActive(base.getIsActive())
                 .bio(base.getBio())
                 .favorites(base.getFavorites())
                 .dateOfBirth(base.getDateOfBirth())

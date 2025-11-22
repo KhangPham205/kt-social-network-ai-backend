@@ -1,15 +1,18 @@
 package com.kt.social.infra.websocket;
 
+import com.kt.social.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.security.Principal;
+import java.time.Instant;
 import java.util.Map;
 
 @Component
@@ -18,6 +21,7 @@ import java.util.Map;
 public class WebSocketEventListener {
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserRepository userRepository;
 
     // Lưu danh sách user online trong bộ nhớ (Map<UserId, Count>)
     // Nếu scale nhiều server thì phải dùng Redis
@@ -42,20 +46,27 @@ public class WebSocketEventListener {
     }
 
     @EventListener
+    @Transactional
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
         StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
-        Principal user = headerAccessor.getUser();
+        Principal userPrincipal = headerAccessor.getUser();
 
-        if (user != null) {
-            String userId = user.getName();
+        if (userPrincipal != null) {
+            String userIdStr = userPrincipal.getName();
+            Long userId = Long.parseLong(userIdStr);
             log.info("❌ User Disconnected: " + userId);
 
             Map<String, Object> statusUpdate = Map.of(
                     "type", "USER_OFFLINE",
                     "userId", userId,
-                    "timestamp", System.currentTimeMillis()
+                    "timestamp", Instant.now().toString()
             );
             messagingTemplate.convertAndSend("/topic/public", statusUpdate);
+
+            userRepository.findById(userId).ifPresent(user -> {
+                user.setLastActiveAt(Instant.now());
+                userRepository.save(user);
+            });
         }
     }
 }
