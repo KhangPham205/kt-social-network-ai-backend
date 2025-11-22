@@ -81,7 +81,6 @@ public class AuthServiceImpl implements AuthService {
 
         com.kt.social.domain.user.model.User user = com.kt.social.domain.user.model.User.builder()
                 .displayName(registerRequest.getFullname())
-                .isActive(true)
                 .credential(userCredential)
                 .build();
 
@@ -233,7 +232,6 @@ public class AuthServiceImpl implements AuthService {
 
         com.kt.social.domain.user.model.User user = com.kt.social.domain.user.model.User.builder()
                 .displayName(request.getFullname())
-                .isActive(true)
                 .credential(userCredential)
                 .build();
 

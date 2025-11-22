@@ -102,7 +102,6 @@ public class DataInitializer {
 
             User adminUser = User.builder()
                     .displayName("Administrator")
-                    .isActive(true)
                     .build();
 
             UserInfo adminInfo = UserInfo.builder()

@@ -120,7 +120,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Notification not found"));
 
         if (!notification.getReceiver().getId().equals(user.getId())) {
-            throw new AccessDeniedException("Bạn không có quyền đánh dấu thông báo này.");
+            throw new AccessDeniedException("You do not have permission to access this notification");
         }
 
         // 3. Đánh dấu đã đọc (nếu chưa đọc)
@@ -153,9 +153,6 @@ public class NotificationServiceImpl implements NotificationService {
                 new NotificationCountDto(0L) // Gửi số 0
         );
     }
-
-    // ... (Implement các hàm API: getMyNotifications, markAsRead, markAllAsRead) ...
-    // ... (Bạn có thể tự làm phần này, chúng khá giống PostService)
 
     /**
      * Helper để convert Entity -> DTO

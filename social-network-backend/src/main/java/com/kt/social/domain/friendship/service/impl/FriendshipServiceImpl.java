@@ -408,7 +408,6 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 .id(base.getId())
                 .displayName(base.getDisplayName())
                 .avatarUrl(base.getAvatarUrl())
-                .isActive(base.getIsActive())
                 .bio(base.getBio())
                 .favorites(base.getFavorites())
                 .dateOfBirth(base.getDateOfBirth())

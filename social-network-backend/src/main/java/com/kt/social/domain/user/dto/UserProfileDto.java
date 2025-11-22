@@ -14,7 +14,7 @@ public class UserProfileDto {
     private Long id;
     private String displayName;
     private String avatarUrl;
-    private Boolean isActive;
+    private Instant lastActiveAt;
 
     private String bio;
     private String favorites;

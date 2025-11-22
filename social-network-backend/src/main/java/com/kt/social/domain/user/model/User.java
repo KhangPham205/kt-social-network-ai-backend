@@ -28,7 +28,7 @@ public class User {
 
     private String interestedUser;
 
-    private Boolean isActive = true;
+    private Instant lastActiveAt;
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private UserInfo userInfo;

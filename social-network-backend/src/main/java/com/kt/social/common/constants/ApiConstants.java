@@ -93,6 +93,12 @@ public final class ApiConstants {
      */
     public static final String WEBSOCKET = "/ws";
 
+    /**
+     * Đường dẫn gốc cho Notification Controller
+     * (Ví dụ: /api/v1/notifications)
+     */
+    public static final String NOTIFICATIONS = API_V1 + "/notifications";
+
 
     //================================================================
     //== Whitelists cho Spring Security (Mảng các đường dẫn)
