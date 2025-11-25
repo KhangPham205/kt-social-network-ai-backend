@@ -117,28 +117,28 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, ApiConstants.POSTS + "/create").hasAuthority("POST:CREATE")
                         .requestMatchers(HttpMethod.POST, ApiConstants.POSTS + "/share").hasAuthority("POST:CREATE")
                         .requestMatchers(HttpMethod.PUT, ApiConstants.POSTS + "/update").hasAuthority("POST:UPDATE")
-                        .requestMatchers(HttpMethod.DELETE, ApiConstants.POSTS + "/**").hasAuthority("POST:DELETE")
+                        .requestMatchers(HttpMethod.DELETE, ApiConstants.POSTS + "/**").hasAnyAuthority("POST:DELETE", "POST:DELETE_ANY")
 
                         // 5. Comment API
                         .requestMatchers(HttpMethod.GET, ApiConstants.COMMENTS + "/**").authenticated()
                         .requestMatchers(HttpMethod.POST, ApiConstants.COMMENTS + "/create").hasAuthority("COMMENT:CREATE")
                         .requestMatchers(HttpMethod.PUT, ApiConstants.COMMENTS + "/update").hasAuthority("COMMENT:UPDATE")
-                        .requestMatchers(HttpMethod.DELETE, ApiConstants.COMMENTS + "/**").hasAuthority("COMMENT:DELETE")
+                        .requestMatchers(HttpMethod.DELETE, ApiConstants.COMMENTS + "/**").hasAnyAuthority("COMMENT:DELETE", "COMMENT:DELETE_ANY")
 
                         // 6. Friendship API
                         .requestMatchers(ApiConstants.FRIENDSHIP + "/**").authenticated()
 
                         // 7. Report API
-                        .requestMatchers(HttpMethod.POST, ApiConstants.REPORTS + "/**")
-                        .hasAuthority("REPORT:CREATE")
+                        .requestMatchers(HttpMethod.POST, ApiConstants.REPORTS + "/**").hasAuthority("REPORT:CREATE")
 
                         // 8. Moderation API
-                        .requestMatchers(HttpMethod.GET, ApiConstants.MODERATION + "/**")
-                        .hasAuthority("MODERATION:READ")
-                        .requestMatchers(HttpMethod.PUT, ApiConstants.MODERATION + "/**")
-                        .hasAuthority("MODERATION:UPDATE")
+                        .requestMatchers(HttpMethod.GET, ApiConstants.MODERATION + "/**").hasAuthority("MODERATION:READ")
+                        .requestMatchers(HttpMethod.PUT, ApiConstants.MODERATION + "/**").hasAuthority("MODERATION:UPDATE")
 
-                        // 9. Any other requests
+                        // 9. Recommendation API
+                        .requestMatchers(ApiConstants.RECOMMENDATIONS + "/**").authenticated()
+
+                        // 10. Any other requests
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore((Filter) jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

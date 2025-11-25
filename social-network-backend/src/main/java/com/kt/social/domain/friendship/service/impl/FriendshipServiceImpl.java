@@ -9,6 +9,8 @@ import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
+import com.kt.social.domain.friendship.event.FriendshipAcceptedEvent;
+import com.kt.social.domain.friendship.event.FriendshipDeletedEvent;
 import com.kt.social.domain.friendship.model.Friendship;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.friendship.service.FriendshipService;
@@ -24,6 +26,7 @@ import com.kt.social.domain.user.model.UserRela;
 import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -44,6 +47,7 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
     private final UserRelaRepository userRelaRepository;
     private final UserMapper userMapper;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // --------------------------- Friend Actions ---------------------------
 
@@ -149,6 +153,8 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 null
         );
 
+        eventPublisher.publishEvent(new FriendshipAcceptedEvent(senderId, receiverId));
+
         return new FriendshipResponse("Friend request accepted", FriendshipStatus.FRIEND, senderId, receiverId);
     }
 
@@ -204,6 +210,8 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 friendId,
                 null
         );
+
+        eventPublisher.publishEvent(new FriendshipDeletedEvent(userId, friendId));
 
         return new FriendshipResponse("Unfriended successfully", FriendshipStatus.REJECTED, userId, friendId);
     }
@@ -384,9 +392,13 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
-    private Friendship getFriendship(Long senderId, Long receiverId) {
-        return friendshipRepository.findBySenderAndReceiver(getUser(senderId), getUser(receiverId))
-                .orElseThrow(() -> new ResourceNotFoundException("Friendship not found"));
+    private Friendship getFriendship(Long userId1, Long userId2) {
+        User u1 = getUser(userId1);
+        User u2 = getUser(userId2);
+
+        return friendshipRepository.findBySenderAndReceiver(u1, u2)
+                .or(() -> friendshipRepository.findBySenderAndReceiver(u2, u1))
+                .orElseThrow(() -> new ResourceNotFoundException("Friendship not found between " + userId1 + " and " + userId2));
     }
 
     private UserRelationDto toRelationDto(User viewer, User target) {

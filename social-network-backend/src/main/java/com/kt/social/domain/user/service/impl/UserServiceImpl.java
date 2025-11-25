@@ -295,15 +295,15 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
             user.getUserInfo().setBio(request.getBio());
         }
 
-        if (request.getStatus() != null) {
-            credential.setStatus(request.getStatus());
-            // Nếu ban (cấm), set 'isActive' = false
-            if (request.getStatus() == AccountStatus.BLOCKED) {
-                user.setIsActive(false);
-            } else if (request.getStatus() == AccountStatus.ACTIVE) {
-                user.setIsActive(true);
-            }
-        }
+//        if (request.getStatus() != null) {
+//            credential.setStatus(request.getStatus());
+//            // Nếu ban (cấm), set 'isActive' = false
+//            if (request.getStatus() == AccountStatus.BLOCKED) {
+//                user.setIsActive(false);
+//            } else if (request.getStatus() == AccountStatus.ACTIVE) {
+//                user.setIsActive(true);
+//            }
+//        }
 
         if (request.getRoles() != null && !request.getRoles().isEmpty()) {
             Set<Role> newRoles = new HashSet<>();

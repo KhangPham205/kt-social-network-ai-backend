@@ -1,4 +1,11 @@
 package com.kt.social.domain.recommendation.service;
 
-public class RecommendationService {
+import com.kt.social.domain.friendship.dto.FriendRecommendationDto;
+
+import java.util.List;
+
+public interface RecommendationService {
+
+    List<FriendRecommendationDto> getRecommendations(int limit);
+
 }

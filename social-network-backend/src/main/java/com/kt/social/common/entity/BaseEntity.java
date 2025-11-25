@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.Accessors;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.lang.Nullable;
 
@@ -24,9 +26,11 @@ public class BaseEntity {
     private Long id;
 
     @Nullable
+    @CreationTimestamp
     private Instant createdAt;
 
     @Nullable
+    @UpdateTimestamp
     private Instant updatedAt;
 
     @Nullable

@@ -78,6 +78,12 @@ public final class ApiConstants {
      */
     public static final String MODERATION = API_V1 + "/moderation";
 
+    /**
+     * Đường dẫn gốc cho Recommendations Controller
+     * (Ví dụ: /api/v1/recommendations)
+     */
+    public static final String RECOMMENDATIONS = API_V1 + "/recommendations";
+
 
     //================================================================
     //== Public/Non-API Paths
