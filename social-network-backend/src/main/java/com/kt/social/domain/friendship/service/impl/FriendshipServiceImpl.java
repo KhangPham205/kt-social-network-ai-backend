@@ -250,6 +250,9 @@ public class FriendshipServiceImpl extends BaseFilterService<Friendship, UserRel
                 null
         );
 
+        eventPublisher.publishEvent(new FriendshipDeletedEvent(userId, targetId));
+
+
         return new FriendshipResponse("User blocked successfully", FriendshipStatus.BLOCKED, userId, targetId);
     }
 
