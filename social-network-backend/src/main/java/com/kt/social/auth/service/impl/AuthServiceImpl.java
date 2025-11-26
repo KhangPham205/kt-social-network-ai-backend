@@ -34,9 +34,11 @@ import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -142,6 +144,9 @@ public class AuthServiceImpl implements AuthService {
         return LoginResponse.builder()
                 .email(userCredential.getEmail())
                 .status(userCredential.getStatus())
+                .roles(userCredential.getRoles().stream()
+                        .map(Role::getName)
+                        .collect(Collectors.toList()))
                 .token(TokenResponse.builder()
                         .accessToken(accessToken)
                         .refreshToken(refreshToken.getToken())
