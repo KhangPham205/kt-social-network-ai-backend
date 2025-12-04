@@ -17,6 +17,7 @@ import com.kt.social.domain.post.mapper.PostMapper;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.post.service.PostService;
+import com.kt.social.domain.post.service.PostSyncService;
 import com.kt.social.domain.react.dto.ReactSummaryDto;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.service.ReactService;
@@ -56,6 +57,7 @@ public class PostServiceImpl implements PostService {
     private final UserService userService;
     private final ReactService reactService;
     private final PostMapper postMapper;
+    private final PostSyncService postSyncService;
 
     @Override
     @Transactional
@@ -91,6 +93,10 @@ public class PostServiceImpl implements PostService {
                 savedPost.getId(),
                 Map.of("accessScope", savedPost.getAccessModifier().toString())
         );
+
+        if (savedPost.getAccessModifier() != AccessScope.PRIVATE) {
+            postSyncService.syncPostToMilvus(savedPost.getId(), author.getId(), content);
+        }
 
         PostResponse dto = postMapper.toDto(savedPost);
         dto.setReactSummary(ReactSummaryDto.builder().build());
@@ -336,7 +342,7 @@ public class PostServiceImpl implements PostService {
     }
 
     @Transactional(readOnly = true)
-    protected PageVO<PostResponse> getPostResponsePageVO(User viewer, Page<Post> page) {
+    public PageVO<PostResponse> getPostResponsePageVO(User viewer, Page<Post> page) {
         List<Post> posts = page.getContent();
         if (posts.isEmpty()) {
             return PageVO.emptyPage(page); // Trả về trang rỗng
