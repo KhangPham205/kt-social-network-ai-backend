@@ -5,6 +5,7 @@ import com.kt.social.domain.post.dto.PostResponse;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.post.service.impl.PostServiceImpl;
+import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.repository.ReactRepository;
 import com.kt.social.domain.recommendation.service.PostRecommendationService;
 import com.kt.social.domain.user.model.User;
@@ -41,7 +42,11 @@ public class PostRecommendationServiceImpl implements PostRecommendationService 
         List<Long> recommendedPostIds;
 
         // 1. Lấy 10 bài viết gần nhất user đã Like
-        List<Long> likedPostIds = reactRepository.findLatestLikedPostIds(userId, PageRequest.of(0, 10));
+        List<Long> likedPostIds = reactRepository.findLatestLikedPostIds(
+                userId,
+                TargetType.POST,
+                PageRequest.of(0, 10)
+        );
 
         if (likedPostIds.isEmpty()) {
             log.info("User {} chưa like bài nào -> Cold Start (Lấy bài mới nhất)", userId);

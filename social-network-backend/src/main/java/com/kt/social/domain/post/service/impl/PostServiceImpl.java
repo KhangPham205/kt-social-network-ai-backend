@@ -26,6 +26,7 @@ import com.kt.social.domain.user.model.UserRela;
 import com.kt.social.domain.user.repository.UserRelaRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
+import com.kt.social.infra.ai.AiServiceClient;
 import com.kt.social.infra.storage.StorageService;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import jakarta.persistence.criteria.Predicate;
@@ -58,11 +59,16 @@ public class PostServiceImpl implements PostService {
     private final ReactService reactService;
     private final PostMapper postMapper;
     private final PostSyncService postSyncService;
+    private final AiServiceClient aiServiceClient;
 
     @Override
     @Transactional
     public PostResponse create(String content, String accessModifier, List<MultipartFile> mediaFiles) {
         User author = userService.getCurrentUser();
+
+        if (aiServiceClient.isContentToxic(content)) {
+            throw new BadRequestException("The post content violates community standards (toxic/offensive language).");
+        }
 
         List<Map<String, String>> mediaList = List.of();
         if (mediaFiles != null && !mediaFiles.isEmpty()) {
