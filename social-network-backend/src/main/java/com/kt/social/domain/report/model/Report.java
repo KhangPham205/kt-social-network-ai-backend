@@ -32,7 +32,7 @@ public class Report {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ReportableType targetType; // Loại bị báo cáo (POST, COMMENT, USER)
+    private ReportableType targetType; // Loại bị báo cáo (POST, COMMENT, USER, APPEAL)
 
     @Column(nullable = false)
     private Long targetId; // ID của post/comment/user bị báo cáo

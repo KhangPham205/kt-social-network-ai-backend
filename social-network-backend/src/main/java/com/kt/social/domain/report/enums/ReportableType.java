@@ -4,5 +4,6 @@ public enum ReportableType {
     USER,
     POST,
     COMMENT,
-    MESSAGE
+    MESSAGE,
+    APPEAL
 }

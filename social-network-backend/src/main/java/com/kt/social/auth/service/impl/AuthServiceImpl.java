@@ -117,12 +117,12 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException("Sai tên đăng nhập hoặc mật khẩu");
         }
 
-        if (userCredential.getStatus() != AccountStatus.ACTIVE) {
-            return LoginResponse.builder()
-                    .email(userCredential.getEmail())
-                    .status(userCredential.getStatus())
-                    .build();
-        }
+//        if (userCredential.getStatus() != AccountStatus.ACTIVE) {
+//            return LoginResponse.builder()
+//                    .email(userCredential.getEmail())
+//                    .status(userCredential.getStatus())
+//                    .build();
+//        }
 
         com.kt.social.domain.user.model.User user = userCredential.getUser();
 
