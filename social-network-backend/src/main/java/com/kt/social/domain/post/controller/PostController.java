@@ -6,6 +6,7 @@ import com.kt.social.domain.post.dto.PostResponse;
 import com.kt.social.domain.post.dto.UpdatePostRequest;
 import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.post.service.PostService;
+import com.kt.social.domain.recommendation.service.PostRecommendationService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -25,6 +26,7 @@ import java.util.List;
 public class PostController {
 
     private final PostService postService;
+    private final PostRecommendationService postRecommendationService;
 
     @GetMapping("/feed")
     public ResponseEntity<PageVO<PostResponse>> getFeed(
@@ -32,6 +34,14 @@ public class PostController {
             @RequestParam(required = false) String filter
     ) {
         return ResponseEntity.ok(postService.getFeed(pageable, filter));
+    }
+
+    @GetMapping("/explore")
+    public ResponseEntity<PageVO<PostResponse>> getExploreFeed(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(postRecommendationService.getExploreFeed(page, size));
     }
 
     @GetMapping("/{postId}")

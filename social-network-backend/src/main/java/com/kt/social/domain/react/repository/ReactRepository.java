@@ -55,4 +55,13 @@ public interface ReactRepository extends JpaRepository<React, Long> {
             @Param("targetIds") List<Long> targetIds,
             @Param("targetType") TargetType targetType
     );
+
+    @Query("SELECT r.targetId FROM React r " +
+            "WHERE r.user.id = :userId AND r.targetType = :type " +
+            "ORDER BY r.createdAt DESC")
+    List<Long> findLatestLikedPostIds(
+            @Param("userId") Long userId,
+            @Param("type") TargetType type, // <-- Thêm tham số này
+            Pageable pageable
+    );
 }

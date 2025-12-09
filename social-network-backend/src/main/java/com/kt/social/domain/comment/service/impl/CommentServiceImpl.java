@@ -1,6 +1,7 @@
 package com.kt.social.domain.comment.service.impl;
 
 import com.kt.social.common.exception.AccessDeniedException;
+import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.audit.service.ActivityLogService;
@@ -21,6 +22,7 @@ import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.react.service.ReactService;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.service.UserService;
+import com.kt.social.infra.ai.AiServiceClient;
 import com.kt.social.infra.storage.StorageService;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +52,7 @@ public class CommentServiceImpl implements CommentService {
     private final StorageService storageService;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
+    private final AiServiceClient aiServiceClient;
 
     // ---------------- CREATE ----------------
     @Override
@@ -58,6 +61,10 @@ public class CommentServiceImpl implements CommentService {
         User author = userService.getCurrentUser();
         Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+        if (aiServiceClient.isContentToxic(request.getContent())) {
+            throw new BadRequestException("Bình luận chứa ngôn từ không phù hợp.");
+        }
 
         checkViewPermission(author, post);
 
