@@ -368,7 +368,7 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
         Specification<User> combinedSpec = (root1, query1, cb1) -> cb1.and(
                 cb1.notEqual(root1.get("id"), viewer.getId()),
-                cb1.isTrue(root1.get("isActive")),
+//                cb1.isTrue(root1.get("isActive")),
                 totalBlocked.isEmpty() ? cb1.conjunction() : cb1.not(root1.get("id").in(totalBlocked))
         );
 

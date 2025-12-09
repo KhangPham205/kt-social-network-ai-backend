@@ -11,7 +11,7 @@ public class AdminUserViewDto {
     private Long id;
     private String displayName;
     private String avatarUrl;
-    private boolean isActive;
+//    private boolean isActive;
 
     // Từ UserCredential
     private Long credentialId;
