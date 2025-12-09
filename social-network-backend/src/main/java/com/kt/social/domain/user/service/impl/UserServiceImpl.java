@@ -24,6 +24,8 @@ import com.kt.social.domain.user.repository.*;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.StorageService;
 import io.github.perplexhub.rsql.RSQLJPASupport;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -247,16 +249,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Override
     @Transactional(readOnly = true)
     public PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable) {
-        // 1. Admin BỎ QUA logic block/hide, chỉ filter theo RSQL
         Specification<User> spec = Specification.where(null);
         if (filter != null && !filter.isBlank()) {
             spec = RSQLJPASupport.toSpecification(filter);
         }
 
-        // 2. Query
         Page<User> userPage = userRepository.findAll(spec, pageable);
 
-        // 3. Map sang DTO Admin
         List<AdminUserViewDto> content = userPage.getContent().stream()
                 .map(userMapper::toAdminViewDto)
                 .toList();
@@ -410,8 +409,8 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
     // ---------------------- Follow/Unfollow ----------------------
     @Override
-    @Transactional
-    public PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable) {
+    @Transactional(readOnly = true)
+    public PageVO<UserRelationDto> getFollowersPaged(Long userId, String filter, Pageable pageable) {
         User viewer = getCurrentUser();
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -419,11 +418,25 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         var blockedIds = blockUtils.getAllBlockedIds(viewer.getId());
         blockedIds.addAll(friendshipRepository.findBlockedUserIdsByTarget(viewer.getId()));
 
-        var followersPage = userRelaRepository.findByFollowing(target, pageable);
+        Specification<UserRela> spec = (root, query, cb) -> {
+            // Lấy ai đang follow Target
+            // UserRela: follower -> following (Target)
+            var predicate = cb.equal(root.get("following"), target);
+
+            // Loại bỏ user bị block (Lọc ngay trong DB để đúng phân trang)
+            if (!blockedIds.isEmpty()) {
+                // Check ID của người Follower xem có nằm trong list block không
+                predicate = cb.and(predicate, cb.not(root.get("follower").get("id").in(blockedIds)));
+            }
+            return predicate;
+        };
+
+        spec = spec.and(buildRelationFilterSpec(filter, "follower"));
+
+        Page<UserRela> followersPage = userRelaRepository.findAll(spec, pageable);
 
         List<User> followers = followersPage.getContent().stream()
                 .map(UserRela::getFollower)
-                .filter(u -> !blockedIds.contains(u.getId()))
                 .toList();
 
         Map<Long, UserRelationDto> relationDtos = mapPageToRelationDtos(viewer, followers);
@@ -443,8 +456,8 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     }
 
     @Override
-    @Transactional
-    public PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable) {
+    @Transactional(readOnly = true)
+    public PageVO<UserRelationDto> getFollowingPaged(Long userId, String filter, Pageable pageable) {
         User viewer = getCurrentUser();
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -452,11 +465,25 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         var blockedIds = blockUtils.getAllBlockedIds(viewer.getId());
         blockedIds.addAll(friendshipRepository.findBlockedUserIdsByTarget(viewer.getId()));
 
-        var followingPaged = userRelaRepository.findByFollower(target, pageable);
+        Specification<UserRela> spec = (root, query, cb) -> {
+            // Target đang follow ai
+            // UserRela: follower (Target) -> following
+            var predicate = cb.equal(root.get("follower"), target);
 
-        List<User> following = followingPaged.getContent().stream()
+            // Loại bỏ block
+            if (!blockedIds.isEmpty()) {
+                // Check ID của người Following xem có nằm trong list block không
+                predicate = cb.and(predicate, cb.not(root.get("following").get("id").in(blockedIds)));
+            }
+            return predicate;
+        };
+
+        spec = spec.and(buildRelationFilterSpec(filter, "following"));
+
+        Page<UserRela> followingPage = userRelaRepository.findAll(spec, pageable);
+
+        List<User> following = followingPage.getContent().stream()
                 .map(UserRela::getFollowing)
-                .filter(u -> !blockedIds.contains(u.getId()))
                 .toList();
 
         Map<Long, UserRelationDto> relationDtos = mapPageToRelationDtos(viewer, following);
@@ -466,10 +493,10 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 .toList();
 
         return PageVO.<UserRelationDto>builder()
-                .page(followingPaged.getNumber())
-                .size(followingPaged.getSize())
-                .totalElements(followingPaged.getTotalElements())
-                .totalPages(followingPaged.getTotalPages())
+                .page(followingPage.getNumber())
+                .size(followingPage.getSize())
+                .totalElements(followingPage.getTotalElements())
+                .totalPages(followingPage.getTotalPages())
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
@@ -560,5 +587,41 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 .isFollowedBy(isFollowedBy)
                 .friendship(friendship) // Use the properly built friendship response
                 .build();
+    }
+
+    /**
+     * Helper: Tạo Spec lọc cho bảng UserRela nhưng dựa trên thuộc tính của User liên quan.
+     * @param filter Chuỗi filter từ request
+     * @param joinFieldName Tên trường cần join ("follower" hoặc "following")
+     */
+    private Specification<UserRela> buildRelationFilterSpec(String filter, String joinFieldName) {
+        if (filter == null || filter.isBlank()) {
+            return null;
+        }
+
+        // Trường hợp 1: Dùng RSQL (có dấu == hoặc =like=)
+        if (filter.contains("==") || filter.contains("=like=")) {
+            // Lưu ý: RSQLJPASupport mặc định map vào root entity (UserRela).
+            // Để lọc được User, client cần gửi đúng path, ví dụ: "follower.displayName==abc"
+            // Hoặc chúng ta có thể prefix thủ công nếu client chỉ gửi "displayName==abc",
+            // nhưng cách đơn giản nhất là để RSQL xử lý native path.
+            return RSQLJPASupport.toSpecification(filter);
+        }
+
+        // Trường hợp 2: Search keyword đơn giản (như searchUsers)
+        else {
+            String likeFilter = "%" + filter.toLowerCase() + "%";
+            return (root, query, cb) -> {
+                // Join sang bảng User (follower hoặc following)
+                Join<UserRela, User> userJoin = root.join(joinFieldName, JoinType.INNER);
+
+                // Tìm kiếm trên các trường của User đó
+                return cb.or(
+                        cb.like(cb.lower(userJoin.get("displayName")), likeFilter),
+                        cb.like(cb.lower(userJoin.get("credential").get("username")), likeFilter),
+                        cb.like(cb.lower(userJoin.get("userInfo").get("bio")), likeFilter)
+                );
+            };
+        }
     }
 }

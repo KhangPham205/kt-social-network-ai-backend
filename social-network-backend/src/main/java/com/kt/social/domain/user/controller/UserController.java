@@ -71,17 +71,19 @@ public class UserController {
     @GetMapping("/{id}/followers")
     public ResponseEntity<PageVO<UserRelationDto>> getFollowers(
             @PathVariable Long id,
+            @RequestParam(required = false) String filter,
             @ParameterObject Pageable pageable
     ) {
-        return ResponseEntity.ok(userService.getFollowersPaged(id, pageable));
+        return ResponseEntity.ok(userService.getFollowersPaged(id, filter, pageable));
     }
 
     @GetMapping("/{id}/following")
     public ResponseEntity<PageVO<UserRelationDto>> getFollowing(
             @PathVariable Long id,
+            @RequestParam(required = false) String filter,
             @ParameterObject Pageable pageable
     ) {
-        return ResponseEntity.ok(userService.getFollowingPaged(id, pageable));
+        return ResponseEntity.ok(userService.getFollowingPaged(id, filter, pageable));
     }
 
     @GetMapping("/{id}/relation-status")

@@ -20,8 +20,8 @@ public interface UserService {
     FollowResponse unfollowUser(Long followingId);
     FollowResponse removeFollower(Long followerId);
     PageVO<UserRelationDto> searchUsers(String filter, Pageable pageable);
-    PageVO<UserRelationDto> getFollowersPaged(Long userId, Pageable pageable);
-    PageVO<UserRelationDto> getFollowingPaged(Long userId, Pageable pageable);
+    PageVO<UserRelationDto> getFollowersPaged(Long userId, String filter, Pageable pageable);
+    PageVO<UserRelationDto> getFollowingPaged(Long userId, String filter, Pageable pageable);
     UserProfileDto updateAvatar(MultipartFile avatarFile);
     UserRelationDto getRelationWithUser(Long targetUserId);
 
