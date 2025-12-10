@@ -250,8 +250,16 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Transactional(readOnly = true)
     public PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable) {
         Specification<User> spec = Specification.where(null);
+
         if (filter != null && !filter.isBlank()) {
-            spec = RSQLJPASupport.toSpecification(filter);
+            Map<String, String> propertyPathMapper = Map.of(
+                    "status", "credential.status",      // status -> credential.status
+                    "username", "credential.username",  // username -> credential.username
+                    "email", "credential.email",        // email -> credential.email
+                    "role", "credential.roles.name"     // role -> credential.roles.name (nếu cần lọc theo role)
+            );
+
+            spec = RSQLJPASupport.toSpecification(filter, propertyPathMapper);
         }
 
         Page<User> userPage = userRepository.findAll(spec, pageable);
@@ -269,7 +277,6 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 .content(content)
                 .build();
     }
-
 
     @Override
     @Transactional(readOnly = true)
