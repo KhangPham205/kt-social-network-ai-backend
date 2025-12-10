@@ -30,7 +30,7 @@ public class User {
 
     private Instant lastActiveAt;
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     private UserInfo userInfo;
 
     @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL)

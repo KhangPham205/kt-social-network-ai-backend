@@ -35,10 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -252,13 +249,30 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         Specification<User> spec = Specification.where(null);
 
         if (filter != null && !filter.isBlank()) {
-            Map<String, String> propertyPathMapper = Map.of(
-                    "status", "credential.status",      // status -> credential.status
-                    "username", "credential.username",  // username -> credential.username
-                    "email", "credential.email",        // email -> credential.email
-                    "role", "credential.roles.name"     // role -> credential.roles.name (nếu cần lọc theo role)
-            );
+            Map<String, String> propertyPathMapper = new HashMap<>();
 
+            // 1. User Credential (Quan trọng nhất)
+            propertyPathMapper.put("email", "credential.email");
+            propertyPathMapper.put("username", "credential.username");
+            propertyPathMapper.put("status", "credential.status");
+
+            // 2. Role (Cho phép lọc: role=='ADMIN')
+            propertyPathMapper.put("role", "credential.roles.name");
+            propertyPathMapper.put("roles", "credential.roles.name");
+
+            // 3. User Info (Thông tin phụ)
+            propertyPathMapper.put("bio", "userInfo.bio");
+            propertyPathMapper.put("favorites", "userInfo.favorites");
+            propertyPathMapper.put("dateOfBirth", "userInfo.dateOfBirth");
+            propertyPathMapper.put("birthDate", "userInfo.dateOfBirth"); // Alias thêm cho dễ dùng
+
+            // 4. Các trường gốc (Map chính nó cho rõ ràng, dù không map thì RSQL cũng tự tìm được)
+            propertyPathMapper.put("displayName", "displayName");
+            propertyPathMapper.put("id", "id");
+            propertyPathMapper.put("createdAt", "createdAt");
+            propertyPathMapper.put("updatedAt", "updatedAt");
+
+            // Truyền map vào RSQL
             spec = RSQLJPASupport.toSpecification(filter, propertyPathMapper);
         }
 
