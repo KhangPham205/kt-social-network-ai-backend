@@ -25,3 +25,5 @@ replay_pid*
 
 /neo4j_data
 /milvus_data
+/data
+docker/dev/**
