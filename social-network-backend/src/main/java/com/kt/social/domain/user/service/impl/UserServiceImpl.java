@@ -28,7 +28,9 @@ import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -246,21 +248,21 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     @Override
     @Transactional(readOnly = true)
     public PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable) {
-        Specification<User> spec = Specification.where(null);
 
+        Specification<User> spec = Specification.where(null);
         if (filter != null && !filter.isBlank()) {
             String mappedFilter = filter
                     .replace("email", "credential.email")
                     .replace("username", "credential.username")
                     .replace("status", "credential.status")
                     .replace("role", "credential.roles.name")
-                    .replace("bio", "userInfo.bio")
-                    .replace("favorites", "userInfo.favorites");
-
+                    .replace("bio", "userInfo.bio");
             spec = RSQLJPASupport.toSpecification(mappedFilter);
         }
 
-        Page<User> userPage = userRepository.findAll(spec, pageable);
+        Pageable sortedPageable = mapSortProperties(pageable);
+
+        Page<User> userPage = userRepository.findAll(spec, sortedPageable);
 
         List<AdminUserViewDto> content = userPage.getContent().stream()
                 .map(userMapper::toAdminViewDto)
@@ -628,5 +630,42 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
                 );
             };
         }
+    }
+
+    /**
+     * Hàm Helper: Dịch lại các thuộc tính Sort sang đúng đường dẫn JPA
+     */
+    private Pageable mapSortProperties(Pageable pageable) {
+        if (pageable.getSort().isUnsorted()) {
+            return pageable;
+        }
+
+        List<Sort.Order> newOrders = pageable.getSort().stream()
+                .map(order -> {
+                    String property = order.getProperty();
+                    // Map các trường ảo sang trường thật trong DB
+                    switch (property) {
+                        case "email":
+                            return new Sort.Order(order.getDirection(), "credential.email");
+                        case "username":
+                            return new Sort.Order(order.getDirection(), "credential.username");
+                        case "status":
+                            return new Sort.Order(order.getDirection(), "credential.status");
+                        case "role":
+                            return new Sort.Order(order.getDirection(), "credential.roles.name");
+                        case "bio":
+                            return new Sort.Order(order.getDirection(), "userInfo.bio");
+                        case "favorites":
+                            return new Sort.Order(order.getDirection(), "userInfo.favorites");
+                        case "dateOfBirth":
+                            return new Sort.Order(order.getDirection(), "userInfo.dateOfBirth");
+                        default:
+                            // Các trường gốc (id, displayName...) giữ nguyên
+                            return order;
+                    }
+                })
+                .toList();
+
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(newOrders));
     }
 }
