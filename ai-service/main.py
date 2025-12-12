@@ -1,7 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
+from PIL import Image
+import io
 import uvicorn
 
 app = FastAPI()
