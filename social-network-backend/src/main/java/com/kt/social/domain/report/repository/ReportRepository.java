@@ -21,10 +21,11 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
     @Query("SELECT r FROM Report r WHERE r.status = :status AND (" +
             "(r.targetType = 'USER' AND r.targetId = :userId) OR " +
             "(r.targetType = 'POST' AND r.targetId IN (SELECT p.id FROM Post p WHERE p.author.id = :userId)) OR " +
-            "(r.targetType = 'COMMENT' AND r.targetId IN (SELECT c.id FROM Comment c WHERE c.author = :userId))" +
+            "(r.targetType = 'COMMENT' AND r.targetId IN (SELECT c.id FROM Comment c WHERE c.author.id = :userId))" +
             ") ORDER BY r.createdAt DESC")
     Page<Report> findAllViolationsByUserId(
             @Param("userId") Long userId,
             @Param("status") ReportStatus status,
-            Pageable pageable);
+            Pageable pageable
+    );
 }

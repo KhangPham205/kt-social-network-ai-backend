@@ -1,7 +1,5 @@
 package com.kt.social.domain.message.service.impl;
 
-import com.kt.social.auth.repository.UserCredentialRepository;
-import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
@@ -19,6 +17,7 @@ import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.StorageService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,25 +25,56 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final ConversationMemberRepository memberRepository;
     private final UserRepository userRepository;
-    private final ConversationMemberRepository conversationMemberRepository;
     private final StorageService storageService;
     private final UserService userService;
     private final SimpMessagingTemplate messagingTemplate;
+
+    // Constants cho JSON Keys
+    private static final String KEY_ID = "id";
+    private static final String KEY_SENDER_ID = "senderId";
+    private static final String KEY_SENDER_NAME = "senderName";
+    private static final String KEY_CONTENT = "content";
+    private static final String KEY_TYPE = "type";
+    private static final String KEY_CREATED_AT = "createdAt";
+    private static final String KEY_READ_BY = "readBy";
 
     @Override
     @Transactional
     public ConversationResponse createConversation(ConversationCreateRequest req) {
         User creator = userService.getCurrentUser();
 
+        // 1. CHAT 1-1: KIỂM TRA TRÙNG LẶP
+        if (Boolean.FALSE.equals(req.getIsGroup())) {
+            if (req.getMemberIds() == null || req.getMemberIds().isEmpty()) {
+                throw new BadRequestException("Private conversation must have a recipient.");
+            }
+
+            Long recipientId = req.getMemberIds().get(0);
+
+            // Chặn chat với chính mình (hoặc cho phép tùy nghiệp vụ, ở đây tạm chặn để tránh lỗi logic)
+            if (creator.getId().equals(recipientId)) {
+                throw new BadRequestException("Cannot create conversation with yourself.");
+            }
+
+            // Gọi Repo kiểm tra xem đã có conversation giữa 2 người này chưa
+            Optional<Conversation> existing = conversationRepository
+                    .findExistingPrivateConversation(creator.getId(), recipientId);
+
+            if (existing.isPresent()) {
+                return mapToResponse(existing.get());
+            }
+        }
+
+        // 2. TẠO MỚI (GROUP HOẶC 1-1 CHƯA TỒN TẠI)
         String mediaUrl = null;
         if (req.getMedia() != null && !req.getMedia().isEmpty()) {
             mediaUrl = storageService.saveFile(req.getMedia(), "conversations/" + UUID.randomUUID());
@@ -52,60 +82,57 @@ public class ConversationServiceImpl implements ConversationService {
 
         Conversation convo = Conversation.builder()
                 .isGroup(Boolean.TRUE.equals(req.getIsGroup()))
-                .title(req.getTitle())
+                .title(req.getTitle()) // Với 1-1 title thường null
                 .mediaUrl(mediaUrl)
                 .messages(new ArrayList<>())
                 .createdAt(Instant.now())
+                .updatedAt(Instant.now())
                 .build();
 
         Conversation saved = conversationRepository.save(convo);
 
-        // Người tạo là OWNER
-        ConversationMember owner = ConversationMember.builder()
+        // Tạo danh sách thành viên cần lưu
+        List<ConversationMember> membersToSave = new ArrayList<>();
+
+        // Add Owner
+        membersToSave.add(ConversationMember.builder()
                 .id(new ConversationMemberId(saved.getId(), creator.getId()))
                 .conversation(saved)
                 .user(creator)
                 .joinedAt(Instant.now())
                 .role(ConversationRole.OWNER)
-                .build();
-        memberRepository.save(owner);
+                .build());
 
-        // Các thành viên khác là MEMBER
+        // Add Members
         if (req.getMemberIds() != null) {
-            for (Long userId : req.getMemberIds()) {
-                if (!userId.equals(creator.getId())) {
-                    User member = userRepository.findById(userId)
-                            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+            Set<Long> uniqueIds = new HashSet<>(req.getMemberIds());
+            uniqueIds.remove(creator.getId()); // Tránh add trùng creator
 
-                    ConversationMember cm = ConversationMember.builder()
+            if (!uniqueIds.isEmpty()) {
+                List<User> users = userRepository.findAllById(uniqueIds);
+                if (users.size() != uniqueIds.size()) {
+                    throw new ResourceNotFoundException("Some users not found");
+                }
+
+                for (User member : users) {
+                    membersToSave.add(ConversationMember.builder()
                             .id(new ConversationMemberId(saved.getId(), member.getId()))
                             .conversation(saved)
                             .user(member)
                             .joinedAt(Instant.now())
                             .role(ConversationRole.MEMBER)
-                            .build();
-                    memberRepository.save(cm);
+                            .build());
                 }
             }
         }
+        memberRepository.saveAll(membersToSave);
 
-        if (saved.getIsGroup()) {
+        // Gửi tin nhắn hệ thống nếu là Group
+        if (Boolean.TRUE.equals(saved.getIsGroup())) {
             saveAndSendSystemMessage(saved, creator, creator.getDisplayName() + " created the group conversation.");
         }
 
-        List<Long> memberIds = memberRepository.findByConversation(saved)
-                .stream()
-                .map(m -> m.getUser().getId())
-                .collect(Collectors.toList());
-
-        return ConversationResponse.builder()
-                .id(saved.getId())
-                .isGroup(saved.getIsGroup())
-                .title(saved.getTitle())
-                .mediaUrl(saved.getMediaUrl())
-                .createdAt(saved.getCreatedAt())
-                .memberIds(memberIds)
-                .build();
+        return mapToResponse(saved);
     }
 
     @Override
@@ -135,8 +162,9 @@ public class ConversationServiceImpl implements ConversationService {
             conversation.setUpdatedAt(Instant.now());
             conversationRepository.save(conversation);
 
+            // Gửi tin nhắn hệ thống báo cập nhật
             saveAndSendSystemMessage(conversation, member.getUser(),
-                    member.getUser().getDisplayName() + " updated the group information.");
+                    member.getUser().getDisplayName() + " updated group info.");
         }
 
         return toConversationSummaryDto(conversation, currentUserId);
@@ -148,17 +176,13 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationMember currentUserMember = checkGroupAndGetMember(request.getConversationId(), currentUserId);
         Conversation conversation = currentUserMember.getConversation();
 
-        if (!conversation.getIsGroup()) {
-            throw new BadRequestException("You cannot add a member to 1-1 conversation");
-        }
-
         if (currentUserMember.getRole() == ConversationRole.MEMBER) {
-            throw new AccessDeniedException("Only OWNER or ADMIN can add a new member");
+            throw new AccessDeniedException("Only OWNER or ADMIN can add new members");
         }
 
-        Set<Long> existingMemberIds = conversation.getMembers().stream()
-                .map(cm -> cm.getUser().getId())
-                .collect(Collectors.toSet());
+        // Lấy list ID hiện tại để lọc trùng
+        Set<Long> existingMemberIds = memberRepository.findByConversationId(conversation.getId())
+                .stream().map(m -> m.getUser().getId()).collect(Collectors.toSet());
 
         List<Long> newMemberIds = request.getUserIds().stream()
                 .filter(id -> !existingMemberIds.contains(id))
@@ -167,60 +191,54 @@ public class ConversationServiceImpl implements ConversationService {
 
         if (newMemberIds.isEmpty()) return toConversationSummaryDto(conversation, currentUserId);
 
-        List<User> newUsers = userRepository.findByIdIn(newMemberIds);
+        List<User> newUsers = userRepository.findAllById(newMemberIds);
         List<ConversationMember> newMembers = newUsers.stream()
                 .map(user -> ConversationMember.builder()
-                        .id(new ConversationMemberId(request.getConversationId(), user.getId()))
+                        .id(new ConversationMemberId(conversation.getId(), user.getId()))
                         .conversation(conversation)
                         .user(user)
                         .role(ConversationRole.MEMBER)
                         .joinedAt(Instant.now())
                         .build())
                 .toList();
-        conversationMemberRepository.saveAll(newMembers);
+        memberRepository.saveAll(newMembers);
 
         conversation.setUpdatedAt(Instant.now());
         conversationRepository.save(conversation);
 
         String addedNames = newUsers.stream().map(User::getDisplayName).collect(Collectors.joining(", "));
         saveAndSendSystemMessage(conversation, currentUserMember.getUser(),
-                currentUserMember.getUser().getDisplayName() + " added " + addedNames + " into group.");
+                currentUserMember.getUser().getDisplayName() + " added " + addedNames + ".");
 
-        Conversation updatedConvo = conversationRepository.findById(request.getConversationId()).get();
-        return toConversationSummaryDto(updatedConvo, currentUserId);
+        return toConversationSummaryDto(conversation, currentUserId);
     }
 
     @Override
     @Transactional
     public ConversationSummaryResponse removeMemberFromGroup(Long currentUserId, Long conversationId, Long userIdToRemove) {
         ConversationMember currentUserMember = checkGroupAndGetMember(conversationId, currentUserId);
-        ConversationMember targetMember = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userIdToRemove)
-                .orElseThrow(() -> new ResourceNotFoundException("This member does not exist in the group."));
+
+        // Optimize: Tìm trực tiếp member cần xóa
+        ConversationMember targetMember = memberRepository.findByConversationIdAndUserId(conversationId, userIdToRemove)
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found in group."));
 
         if (currentUserId.equals(userIdToRemove)) {
-            throw new BadRequestException("You cannot remove yourself. Use leaveConversation instead.");
+            throw new BadRequestException("Use leaveConversation to remove yourself.");
         }
 
-        ConversationRole currentUserRole = currentUserMember.getRole();
-        ConversationRole targetUserRole = targetMember.getRole();
-
-        if (currentUserRole == ConversationRole.MEMBER) throw new AccessDeniedException("Only OWNER or ADMIN can remove members.");
-        if (targetUserRole == ConversationRole.OWNER) throw new AccessDeniedException("Cannot remove the OWNER from the group.");
-        if (currentUserRole == ConversationRole.ADMIN && targetUserRole == ConversationRole.ADMIN)
-            throw new AccessDeniedException("ADMIN cannot remove other ADMINs.");
+        validateRemovePermission(currentUserMember.getRole(), targetMember.getRole());
 
         String removedUserName = targetMember.getUser().getDisplayName();
-        conversationMemberRepository.delete(targetMember);
+        memberRepository.delete(targetMember);
 
         Conversation conversation = currentUserMember.getConversation();
         conversation.setUpdatedAt(Instant.now());
         conversationRepository.save(conversation);
 
         saveAndSendSystemMessage(conversation, currentUserMember.getUser(),
-                currentUserMember.getUser().getDisplayName() + " deleted " + removedUserName + " from the group.");
+                currentUserMember.getUser().getDisplayName() + " removed " + removedUserName + ".");
 
-        Conversation updatedConvo = conversationRepository.findById(conversationId).get();
-        return toConversationSummaryDto(updatedConvo, currentUserId);
+        return toConversationSummaryDto(conversation, currentUserId);
     }
 
     @Override
@@ -228,85 +246,82 @@ public class ConversationServiceImpl implements ConversationService {
     public void leaveConversation(Long currentUserId, Long conversationId) {
         ConversationMember member = checkGroupAndGetMember(conversationId, currentUserId);
         Conversation conversation = member.getConversation();
-        String leaverName = member.getUser().getDisplayName();
 
-        // Logic Owner
         if (member.getRole() == ConversationRole.OWNER) {
-            // 🔥 SỬ DỤNG HÀM countByConversationId MỚI
-            long memberCount = conversationMemberRepository.countByConversationId(conversationId);
-
+            long memberCount = memberRepository.countByConversationId(conversationId);
             if (memberCount > 1) {
-                throw new BadRequestException("You are the OWNER. Please transfer ownership or delete the group.");
+                throw new BadRequestException("Owner must transfer ownership before leaving.");
             } else {
+                // Nhóm chỉ còn 1 người -> Xóa luôn nhóm
                 conversationRepository.delete(conversation);
-                // Nhóm giải tán -> Gửi sự kiện socket nhưng không lưu DB (vì DB đã xóa)
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("type", "EVENT_CONVERSATION_DELETED");
-                payload.put("conversationId", conversationId);
+                // Notify socket xóa nhóm
+                Map<String, Object> payload = Map.of(
+                        "type", "EVENT_CONVERSATION_DELETED",
+                        "conversationId", conversationId
+                );
                 messagingTemplate.convertAndSend("/queue/conversation/" + conversationId, payload);
                 return;
             }
         }
 
-        conversationMemberRepository.delete(member);
+        memberRepository.delete(member);
 
-        conversation.setUpdatedAt(Instant.now());
-        conversationRepository.save(conversation);
-
-        saveAndSendSystemMessage(conversation, member.getUser(), leaverName + " left the conversation.");
+        // Nếu là group thì báo tin nhắn hệ thống
+        if (Boolean.TRUE.equals(conversation.getIsGroup())) {
+            conversation.setUpdatedAt(Instant.now());
+            conversationRepository.save(conversation);
+            saveAndSendSystemMessage(conversation, member.getUser(), member.getUser().getDisplayName() + " left.");
+        }
     }
 
     @Override
     @Transactional
     public ConversationSummaryResponse updateMemberRole(Long currentUserId, UpdateMemberRoleRequest request) {
-        // Lấy member thực hiện (và kiểm tra nhóm)
         ConversationMember currentUserMember = checkGroupAndGetMember(request.getConversationId(), currentUserId);
 
-        // Lấy member bị thay đổi
-        ConversationMember targetMember = conversationMemberRepository.findByConversationIdAndUserId(request.getConversationId(), request.getUserIdToChange())
-                .orElseThrow(() -> new ResourceNotFoundException("This member does not exist in the group."));
-
-        // Validate vai trò mới (Không được phép gán OWNER)
-        if (request.getNewRole() == null || request.getNewRole() == ConversationRole.OWNER) {
-            throw new BadRequestException("Invalid role specified. Can only assign ADMIN or MEMBER roles.");
-        }
-
-        // Kiểm tra quyền: Chỉ OWNER/ADMIN mới được làm
         if (currentUserMember.getRole() == ConversationRole.MEMBER) {
-            throw new AccessDeniedException("Only OWNER or ADMIN can change member roles.");
+            throw new AccessDeniedException("Permission denied.");
         }
+
+        ConversationMember targetMember = memberRepository.findByConversationIdAndUserId(request.getConversationId(), request.getUserIdToChange())
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found."));
 
         if (targetMember.getRole() == ConversationRole.OWNER) {
-            throw new BadRequestException("Cannot change role of the OWNER.");
+            throw new BadRequestException("Cannot change OWNER role.");
+        }
+
+        // Validate request role
+        if (request.getNewRole() == ConversationRole.OWNER) {
+            throw new BadRequestException("Cannot assign OWNER via this API.");
         }
 
         targetMember.setRole(request.getNewRole());
-        conversationMemberRepository.save(targetMember);
+        memberRepository.save(targetMember);
 
         Conversation conversation = currentUserMember.getConversation();
         conversation.setUpdatedAt(Instant.now());
         conversationRepository.save(conversation);
 
-        Conversation updatedConvo = conversationRepository.findById(request.getConversationId()).get();
+        String roleName = request.getNewRole().name();
+        saveAndSendSystemMessage(conversation, currentUserMember.getUser(),
+                targetMember.getUser().getDisplayName() + " is now " + roleName + ".");
 
-        String roleName = request.getNewRole() == ConversationRole.ADMIN ? "ADMIN" : "MEMBER";
-        saveAndSendSystemMessage(currentUserMember.getConversation(), currentUserMember.getUser(),
-                targetMember.getUser().getDisplayName() + " was authorized to be " + roleName + ".");
-
-        return toConversationSummaryDto(updatedConvo, currentUserId);
+        return toConversationSummaryDto(conversation, currentUserId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ConversationSummaryResponse> getUserConversations(Long userId) {
+        // 1. Lấy tất cả ConversationID mà user tham gia
+        List<ConversationMember> members = memberRepository.findConversationsByUserId(userId);
 
-        List<ConversationMember> joined = conversationMemberRepository.findConversationsByUserId(userId);
-
-        Set<Long> processedConversationIds = new HashSet<>();
-
-        return joined.stream()
+        // 2. Chuyển đổi sang DTO
+        // Lưu ý: Cần đảm bảo hàm findConversationsByUserId trong Repo dùng JOIN FETCH để lấy luôn Conversation
+        // để tránh N+1 Query.
+        return members.stream()
                 .map(ConversationMember::getConversation)
-                .filter(c -> c != null && processedConversationIds.add(c.getId()))
+                .distinct() // Tránh trùng lặp nếu query trả về nhiều dòng
+                .sorted(Comparator.comparing(Conversation::getUpdatedAt).reversed()) // Sắp xếp mới nhất lên đầu
                 .map(c -> toConversationSummaryDto(c, userId))
                 .collect(Collectors.toList());
     }
@@ -314,15 +329,12 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional(readOnly = true)
     public ConversationSummaryResponse getConversationById(Long currentUserId, Long conversationId) {
-
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
-        boolean isMember = conversation.getMembers().stream()
-                .anyMatch(m -> m.getUser().getId().equals(currentUserId));
-
+        boolean isMember = memberRepository.existsByConversationIdAndUserId(conversationId, currentUserId);
         if (!isMember) {
-            throw new AccessDeniedException("You are not a member of this conversation.");
+            throw new AccessDeniedException("Not a member.");
         }
 
         return toConversationSummaryDto(conversation, currentUserId);
@@ -331,59 +343,53 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional
     public void findOrCreateDirectConversation(Long userAId, Long userBId) {
-        List<Long> ids = Stream.of(userAId, userBId).sorted().toList();
 
-        Optional<Conversation> existing = conversationRepository.findDirectConversationBetween(ids);
-        if (existing.isPresent()) {
-            Conversation c = existing.get();
-
-            List<Long> memberIds = memberRepository.findByConversation(c)
-                    .stream().map(cm -> cm.getUser().getId()).toList();
-
-            ConversationResponse.builder()
-                    .id(c.getId())
-                    .isGroup(c.getIsGroup())
-                    .title(c.getTitle())
-                    .mediaUrl(c.getMediaUrl())
-                    .createdAt(c.getCreatedAt())
-                    .memberIds(memberIds)
-                    .build();
+        if (userAId.equals(userBId)) {
             return;
         }
 
-        User a = userRepository.findById(userAId)
+        Optional<Conversation> existing = conversationRepository.findExistingPrivateConversation(userAId, userBId);
+
+        if (existing.isPresent()) {
+            return;
+        }
+
+        User userA = userRepository.findById(userAId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userAId));
-        User b = userRepository.findById(userBId)
+        User userB = userRepository.findById(userBId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userBId));
 
-        Conversation convo = Conversation.builder()
+        Conversation conversation = Conversation.builder()
                 .isGroup(false)
                 .title(null)
                 .mediaUrl(null)
                 .createdAt(Instant.now())
-                .messages(new ArrayList<>()) // khởi tạo rỗng
+                .updatedAt(Instant.now())
+                .messages(new ArrayList<>())
                 .build();
 
-        Conversation saved = conversationRepository.save(convo);
+        Conversation savedConversation = conversationRepository.save(conversation);
 
-        ConversationMember cmA = ConversationMember.builder()
-                .id(new ConversationMemberId(saved.getId(), a.getId()))
-                .conversation(saved)
-                .user(a)
-                .joinedAt(Instant.now())
+        ConversationMember memberA = ConversationMember.builder()
+                .id(new ConversationMemberId(savedConversation.getId(), userA.getId()))
+                .conversation(savedConversation)
+                .user(userA)
                 .role(ConversationRole.MEMBER)
-                .build();
-
-        ConversationMember cmB = ConversationMember.builder()
-                .id(new ConversationMemberId(saved.getId(), b.getId()))
-                .conversation(saved)
-                .user(b)
                 .joinedAt(Instant.now())
-                .role(ConversationRole.MEMBER)
                 .build();
 
-        memberRepository.save(cmA);
-        memberRepository.save(cmB);
+        ConversationMember memberB = ConversationMember.builder()
+                .id(new ConversationMemberId(savedConversation.getId(), userB.getId()))
+                .conversation(savedConversation)
+                .user(userB)
+                .role(ConversationRole.MEMBER)
+                .joinedAt(Instant.now())
+                .build();
+
+        memberRepository.saveAll(List.of(memberA, memberB));
+
+        // (Tùy chọn) Có thể gửi socket event "NEW_CONVERSATION" tới 2 user này
+        // để danh sách chat của họ tự động cập nhật mà không cần F5.
     }
 
     @Override
@@ -392,79 +398,80 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation conversation = conversationRepository.findById(request.getConversationId())
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
 
-        boolean isMember = conversation.getMembers().stream()
-                .anyMatch(m -> m.getUser().getId().equals(userId));
-        if (!isMember)
-            throw new AccessDeniedException("You are not a member of this conversation.");
+        if (!memberRepository.existsByConversationIdAndUserId(conversation.getId(), userId)) {
+            throw new AccessDeniedException("Not a member.");
+        }
 
         List<Map<String, Object>> messages = conversation.getMessages();
         if (messages == null || messages.isEmpty()) return;
 
         boolean isUpdated = false;
 
-        // Duyệt ngược từ dưới lên (vì thường người ta đọc tin mới nhất)
-        for (int i = messages.size() - 1; i >= 0; i--) {
+        // 🔥 OPTIMIZATION: Duyệt ngược từ cuối lên (tin mới nhất)
+        // Vì người dùng thường đọc tin mới nhất.
+        // Giới hạn tìm kiếm trong 50 tin gần nhất để tránh treo nếu list quá dài
+        int limit = 50;
+        int count = 0;
+
+        for (int i = messages.size() - 1; i >= 0 && count < limit; i--) {
             Map<String, Object> msg = messages.get(i);
-            String msgId = (String) msg.get("id");
+            String msgId = (String) msg.get(KEY_ID);
 
-            // Tìm đúng tin nhắn
             if (msgId != null && msgId.equals(request.getMessageId())) {
-
-                // Lấy danh sách readBy hiện tại (hoặc tạo mới)
-                List<Long> readBy = (List<Long>) msg.get("readBy");
+                List<String> readBy = (List<String>) msg.get(KEY_READ_BY); // Dùng String ID cho an toàn với JSON
                 if (readBy == null) {
                     readBy = new ArrayList<>();
-                    msg.put("readBy", readBy);
+                    msg.put(KEY_READ_BY, readBy);
                 }
 
-                // Nếu chưa đọc thì thêm vào
-                // Lưu ý: List trong JSONB convert ra có thể là Integer hoặc Long tùy Hibernate, cần ép kiểu cẩn thận
-                boolean alreadyRead = readBy.stream().anyMatch(id -> id.toString().equals(userId.toString()));
-
-                if (!alreadyRead) {
-                    readBy.add(userId);
+                String userIdStr = String.valueOf(userId);
+                if (!readBy.contains(userIdStr)) {
+                    readBy.add(userIdStr);
                     isUpdated = true;
 
+                    // Gửi Socket Event
                     Map<String, Object> payload = new HashMap<>();
-                    payload.put("type", "EVENT_READ");
+                    payload.put(KEY_TYPE, "EVENT_READ");
                     payload.put("conversationId", conversation.getId());
                     payload.put("messageId", msgId);
                     payload.put("readerId", userId);
                     payload.put("timestamp", Instant.now().toString());
-
                     messagingTemplate.convertAndSend("/queue/conversation/" + conversation.getId(), payload);
                 }
-                break; // Tìm thấy rồi thì dừng
+                break; // Tìm thấy thì dừng ngay
             }
+            count++;
         }
 
-        // 4. Lưu DB nếu có thay đổi
         if (isUpdated) {
             conversationRepository.save(conversation);
         }
     }
 
-    // -------------------------HELPER METHODS-------------------------
-    private ConversationSummaryResponse toConversationSummaryDto(Conversation c, Long viewerId) {
-        Map<String, Object> lastMessage = (c.getMessages() != null && !c.getMessages().isEmpty())
-                ? c.getMessages().getFirst()
-                : null;
+    // ------------------------- HELPER METHODS -------------------------
 
+    private ConversationSummaryResponse toConversationSummaryDto(Conversation c, Long viewerId) {
+        // 🔥 FIX: Lấy tin nhắn CUỐI CÙNG (Last), không phải đầu tiên (First)
+        Map<String, Object> lastMessage = null;
+        if (c.getMessages() != null && !c.getMessages().isEmpty()) {
+            lastMessage = c.getMessages().get(c.getMessages().size() - 1);
+        }
+
+        // Lazy Loading Warning: Đảm bảo c.getMembers() đã được fetch hoặc Transaction còn active
         List<ParticipantDto> participants = c.getMembers().stream()
-                .filter(m -> m.getUser() != null)
                 .map(m -> ParticipantDto.builder()
                         .id(m.getUser().getId())
                         .displayName(m.getUser().getDisplayName())
                         .avatarUrl(m.getUser().getAvatarUrl())
-                        .role(m.getRole() != null ? m.getRole().name() : "MEMBER")
+                        .role(m.getRole().name())
                         .build())
                 .toList();
 
         String finalTitle = c.getTitle();
         String finalMediaUrl = c.getMediaUrl();
 
-        if (c.getIsGroup() == null || !c.getIsGroup()) {
-            // Chat 1-1
+        // Logic hiển thị tên/ảnh cho chat 1-1
+        if (Boolean.FALSE.equals(c.getIsGroup())) {
             ParticipantDto otherUser = participants.stream()
                     .filter(p -> !p.getId().equals(viewerId))
                     .findFirst()
@@ -473,8 +480,6 @@ public class ConversationServiceImpl implements ConversationService {
             if (otherUser != null) {
                 finalTitle = otherUser.getDisplayName();
                 finalMediaUrl = otherUser.getAvatarUrl();
-            } else if (finalTitle == null) {
-                finalTitle = "Conversation";
             }
         }
 
@@ -482,7 +487,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .id(c.getId())
                 .title(finalTitle)
                 .mediaUrl(finalMediaUrl)
-                .isGroup(c.getIsGroup() != null && c.getIsGroup())
+                .isGroup(Boolean.TRUE.equals(c.getIsGroup()))
                 .lastMessage(lastMessage)
                 .participants(participants)
                 .updatedAt(c.getUpdatedAt() != null ? c.getUpdatedAt() : c.getCreatedAt())
@@ -490,54 +495,66 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private ConversationMember checkGroupAndGetMember(Long conversationId, Long userId) {
-        ConversationMember member = conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
-                .orElseThrow(() -> new AccessDeniedException("You are not a member of this conversation."));
+        ConversationMember member = memberRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new AccessDeniedException("Not a member of conversation " + conversationId));
 
-        Conversation convo = member.getConversation();
-        if (convo == null) { // Đảm bảo convo được load
-            convo = conversationRepository.findById(conversationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
-            member.setConversation(convo);
+        // Nếu repo không fetch conversation, cần load
+        if (member.getConversation() == null) {
+            member.setConversation(conversationRepository.findById(conversationId).orElseThrow());
         }
 
-        if (convo.getIsGroup() == null || !convo.getIsGroup()) {
-            throw new BadRequestException("This action is only allowed in group conversations.");
+        // Chỉ group mới thực hiện được các hành động này
+        if (Boolean.FALSE.equals(member.getConversation().getIsGroup())) {
+            throw new BadRequestException("Action only valid for groups.");
         }
         return member;
     }
 
+    private void validateRemovePermission(ConversationRole actor, ConversationRole target) {
+        if (actor == ConversationRole.MEMBER) throw new AccessDeniedException("Permission denied.");
+        if (target == ConversationRole.OWNER) throw new AccessDeniedException("Cannot remove Owner.");
+        if (actor == ConversationRole.ADMIN && target == ConversationRole.ADMIN) throw new AccessDeniedException("Admin cannot remove another Admin.");
+    }
+
     private void saveAndSendSystemMessage(Conversation conversation, User sender, String content) {
         Map<String, Object> messageMap = new HashMap<>();
-        messageMap.put("id", UUID.randomUUID().toString());
-        messageMap.put("senderId", sender.getId());
-        messageMap.put("senderName", sender.getDisplayName());
-        messageMap.put("content", content);
-        messageMap.put("type", MessageType.SYSTEM.name());
-        messageMap.put("createdAt", Instant.now().toString());
+        messageMap.put(KEY_ID, UUID.randomUUID().toString());
+        messageMap.put(KEY_SENDER_ID, sender.getId());
+        messageMap.put(KEY_SENDER_NAME, sender.getDisplayName());
+        messageMap.put(KEY_CONTENT, content);
+        messageMap.put(KEY_TYPE, MessageType.SYSTEM.name());
+        messageMap.put(KEY_CREATED_AT, Instant.now().toString());
+        messageMap.put(KEY_READ_BY, new ArrayList<String>()); // Init empty read list
 
         if (conversation.getMessages() == null) {
             conversation.setMessages(new ArrayList<>());
         }
-        conversation.getMessages().add(messageMap);
+        conversation.getMessages().add(messageMap); // Add vào cuối danh sách
 
         conversationRepository.save(conversation);
 
+        // Send Socket
         Map<String, Object> socketPayload = new HashMap<>(messageMap);
         socketPayload.put("conversationId", conversation.getId());
-
-        socketPayload.put("senderName", sender.getDisplayName());
         socketPayload.put("avatarUrl", sender.getAvatarUrl());
-
         messagingTemplate.convertAndSend("/queue/conversation/" + conversation.getId(), socketPayload);
     }
 
-    private void sendSocketEvent(Long conversationId, String type, Long senderId, String content) {
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("type", type);
-        payload.put("conversationId", conversationId);
-        payload.put("senderId", senderId);
-        payload.put("content", content);
-        payload.put("timestamp", Instant.now().toString());
-        messagingTemplate.convertAndSend("/queue/conversation/" + conversationId, payload);
+    private ConversationResponse mapToResponse(Conversation convo) {
+        // Optimize: Thay vì query DB, nếu convo.getMembers() có sẵn thì dùng luôn
+        // Nhưng an toàn nhất là query list ID
+        List<Long> memberIds = memberRepository.findByConversationId(convo.getId())
+                .stream()
+                .map(m -> m.getUser().getId())
+                .collect(Collectors.toList());
+
+        return ConversationResponse.builder()
+                .id(convo.getId())
+                .isGroup(convo.getIsGroup())
+                .title(convo.getTitle())
+                .mediaUrl(convo.getMediaUrl())
+                .createdAt(convo.getCreatedAt())
+                .memberIds(memberIds)
+                .build();
     }
 }

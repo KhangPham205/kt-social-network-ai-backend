@@ -11,18 +11,25 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-@Repository
 public interface ConversationMemberRepository extends JpaRepository<ConversationMember, ConversationMemberId> {
-    List<ConversationMember> findByConversation(Conversation conversation);
+
+    // Tìm member trong 1 group cụ thể
     Optional<ConversationMember> findByConversationIdAndUserId(Long conversationId, Long userId);
 
+    // Đếm số thành viên
+    long countByConversationId(Long conversationId);
+
+    // Kiểm tra tồn tại
+    boolean existsByConversationIdAndUserId(Long conversationId, Long userId);
+
+    // Lấy danh sách ID thành viên
+    List<ConversationMember> findByConversationId(Long conversationId);
+
+    // 🔥 QUAN TRỌNG: Dùng JOIN FETCH để tránh lỗi N+1 khi gọi getConversation() sau này
     @Query("SELECT cm FROM ConversationMember cm " +
             "JOIN FETCH cm.conversation c " +
-            "JOIN FETCH c.members m " +      // Lấy tất cả member của convo đó
-            "JOIN FETCH m.user " +           // Lấy profile user của các member đó
-            "WHERE cm.user.id = :userId " +
-            "ORDER BY c.updatedAt DESC")     // Sắp xếp theo tin nhắn mới nhất
+            "LEFT JOIN FETCH c.members m " +  // Fetch luôn members của conversation để hiển thị avatar
+            "LEFT JOIN FETCH m.user u " +     // Fetch user của members
+            "WHERE cm.user.id = :userId")
     List<ConversationMember> findConversationsByUserId(@Param("userId") Long userId);
-
-    long countByConversationId(Long conversationId);
 }

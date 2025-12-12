@@ -3,7 +3,6 @@ package com.kt.social.domain.report.model;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.enums.ReportReason;
 import com.kt.social.domain.report.enums.ReportStatus;
-import com.kt.social.domain.report.enums.ReportableType;
 import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

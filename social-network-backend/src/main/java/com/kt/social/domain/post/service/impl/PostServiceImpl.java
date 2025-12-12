@@ -1,15 +1,12 @@
 package com.kt.social.domain.post.service.impl;
 
-import com.kt.social.auth.repository.UserCredentialRepository;
-import com.kt.social.auth.util.SecurityUtils;
 import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.audit.service.ActivityLogService;
-import com.kt.social.domain.friendship.enums.FriendshipStatus;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
-import com.kt.social.domain.post.dto.PostRequest;
+import com.kt.social.domain.moderation.event.ContentCreatedEvent;
 import com.kt.social.domain.post.dto.PostResponse;
 import com.kt.social.domain.post.dto.UpdatePostRequest;
 import com.kt.social.domain.post.enums.AccessScope;
@@ -31,6 +28,7 @@ import com.kt.social.infra.storage.StorageService;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -49,6 +47,7 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class PostServiceImpl implements PostService {
 
+    private final ApplicationEventPublisher eventPublisher;
     private final ActivityLogService activityLogService;
     private final UserRelaRepository userRelaRepository;
     private final FriendshipRepository friendshipRepository;
@@ -65,10 +64,6 @@ public class PostServiceImpl implements PostService {
     @Transactional
     public PostResponse create(String content, String accessModifier, List<MultipartFile> mediaFiles) {
         User author = userService.getCurrentUser();
-
-        if (aiServiceClient.isContentToxic(content)) {
-            throw new BadRequestException("The post content violates community standards (toxic/offensive language).");
-        }
 
         List<Map<String, String>> mediaList = List.of();
         if (mediaFiles != null && !mediaFiles.isEmpty()) {
@@ -88,6 +83,7 @@ public class PostServiceImpl implements PostService {
                         ? AccessScope.valueOf(accessModifier)
                         : AccessScope.PUBLIC)
                 .createdAt(Instant.now())
+                .isSystemBan(false)
                 .build();
 
         Post savedPost = postRepository.save(post);
@@ -103,6 +99,13 @@ public class PostServiceImpl implements PostService {
         if (savedPost.getAccessModifier() != AccessScope.PRIVATE) {
             postSyncService.syncPostToMilvus(savedPost.getId(), author.getId(), content);
         }
+
+        eventPublisher.publishEvent(new ContentCreatedEvent(
+                savedPost.getId(),
+                TargetType.POST,
+                savedPost.getContent(),
+                savedPost.getAuthor().getId()
+        ));
 
         PostResponse dto = postMapper.toDto(savedPost);
         dto.setReactSummary(ReactSummaryDto.builder().build());

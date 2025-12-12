@@ -13,6 +13,7 @@ import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.comment.service.CommentService;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
+import com.kt.social.domain.moderation.event.ContentCreatedEvent;
 import com.kt.social.domain.notification.enums.NotificationType;
 import com.kt.social.domain.notification.service.NotificationService;
 import com.kt.social.domain.post.model.Post;
@@ -26,6 +27,7 @@ import com.kt.social.infra.ai.AiServiceClient;
 import com.kt.social.infra.storage.StorageService;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -43,6 +45,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CommentServiceImpl implements CommentService {
 
+    private final ApplicationEventPublisher eventPublisher;
     private final FriendshipRepository friendshipRepository;
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
@@ -52,7 +55,6 @@ public class CommentServiceImpl implements CommentService {
     private final StorageService storageService;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
-    private final AiServiceClient aiServiceClient;
 
     // ---------------- CREATE ----------------
     @Override
@@ -61,10 +63,6 @@ public class CommentServiceImpl implements CommentService {
         User author = userService.getCurrentUser();
         Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-
-        if (aiServiceClient.isContentToxic(request.getContent())) {
-            throw new BadRequestException("Bình luận chứa ngôn từ không phù hợp.");
-        }
 
         checkViewPermission(author, post);
 
@@ -92,6 +90,14 @@ public class CommentServiceImpl implements CommentService {
                 .build();
 
         Comment saved = commentRepository.save(comment);
+
+        eventPublisher.publishEvent(new ContentCreatedEvent(
+                saved.getId(),
+                TargetType.COMMENT,
+                saved.getContent(),
+                saved.getAuthor().getId()
+        ));
+
         safeUpdateCommentCount(post.getId(), 1);
 
         if (request.getParentId() != null) {
@@ -182,6 +188,12 @@ public class CommentServiceImpl implements CommentService {
         }
 
         Comment saved = commentRepository.save(comment);
+        eventPublisher.publishEvent(new ContentCreatedEvent(
+                saved.getId(),
+                TargetType.COMMENT,
+                saved.getContent(),
+                saved.getAuthor().getId()
+        ));
 
         activityLogService.logActivity(
                 current,

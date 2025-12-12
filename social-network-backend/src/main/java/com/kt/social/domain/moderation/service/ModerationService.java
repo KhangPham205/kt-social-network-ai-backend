@@ -1,4 +1,4 @@
-package com.kt.social.domain.admin.service;
+package com.kt.social.domain.moderation.service;
 
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.admin.dto.ModerationMessageResponse;

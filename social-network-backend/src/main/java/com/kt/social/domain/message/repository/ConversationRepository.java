@@ -32,4 +32,15 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
         )
     """, nativeQuery = true)
     Optional<Conversation> findByMessageIdInJson(@Param("messageId") String messageId);
+
+    @Query("SELECT c FROM Conversation c " +
+            "JOIN c.members m1 " +
+            "JOIN c.members m2 " +
+            "WHERE c.isGroup = false " +
+            "AND m1.user.id = :userId1 " +
+            "AND m2.user.id = :userId2")
+    Optional<Conversation> findExistingPrivateConversation(
+            @Param("userId1") Long userId1,
+            @Param("userId2") Long userId2
+    );
 }

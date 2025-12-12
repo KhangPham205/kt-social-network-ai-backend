@@ -3,13 +3,17 @@ package com.kt.social.infra.ai;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.kt.social.domain.moderation.dto.ModerationResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -61,8 +65,9 @@ public class AiServiceClient {
      * Kiểm tra nội dung độc hại
      * @return true nếu nội dung độc hại, false nếu an toàn
      */
-    public boolean isContentToxic(String text) {
-        if (text == null || text.isBlank()) return false;
+    public ModerationResult checkContentToxicity(String text) {
+        if (text == null || text.isBlank())
+            return new ModerationResult(false, null);
 
         try {
             String url = aiServiceUrl + "/moderate";
@@ -77,16 +82,67 @@ public class AiServiceClient {
 
             if (json.has("is_toxic")) {
                 boolean isToxic = json.get("is_toxic").getAsBoolean();
+                String reason = null;
+
                 if (isToxic) {
-                    log.warn("🛡️ AI Moderation: Chặn nội dung độc hại. Flags: {}", json.get("flags"));
+                    // Lấy danh sách cờ vi phạm (flags) để làm lý do
+                    JsonArray flags = json.getAsJsonArray("flags");
+                    reason = "Vi phạm tiêu chuẩn cộng đồng: " + flags.toString();
+                    log.warn("🛡AI Moderation: Chặn nội dung. Reason: {}", reason);
                 }
-                return isToxic;
+
+                return new ModerationResult(isToxic, reason);
             }
-            return false;
+            return new ModerationResult(false, null);
 
         } catch (Exception e) {
             log.error("⚠️ Lỗi gọi AI Moderation: {}", e.getMessage());
-            return false; // Fail-open: Nếu AI chết, tạm thời cho qua để không chặn nhầm
+            return new ModerationResult(false, null);        }
+    }
+
+    /**
+     * Kiểm tra hình ảnh độc hại
+     * @param imageBytes Mảng byte của ảnh
+     * @param filename Tên file (để Python biết định dạng)
+     */
+    public ModerationResult checkImageToxicity(byte[] imageBytes, String filename) {
+        try {
+            String url = aiServiceUrl + "/moderate/image";
+
+            // Tạo Header cho Multipart
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+            // Tạo Body chứa file
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new ByteArrayResource(imageBytes) {
+                @Override
+                public String getFilename() {
+                    return filename; // Bắt buộc phải có tên file
+                }
+            });
+
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+
+            // Gọi API Python
+            String response = restTemplate.postForObject(url, requestEntity, String.class);
+            JsonObject json = gson.fromJson(response, JsonObject.class);
+
+            if (json.has("is_toxic")) {
+                boolean isToxic = json.get("is_toxic").getAsBoolean();
+                String reason = json.get("reason").getAsString();
+
+                if (isToxic) {
+                    log.warn("🛡️ AI Image Check: Chặn ảnh {}. Lý do: {}", filename, reason);
+                }
+                return new ModerationResult(isToxic, reason);
+            }
+
+            return new ModerationResult(false, null);
+
+        } catch (Exception e) {
+            log.error("⚠️ Lỗi gọi AI Image Moderation: {}", e.getMessage());
+            return new ModerationResult(false, null);
         }
     }
 }

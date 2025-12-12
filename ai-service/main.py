@@ -6,18 +6,22 @@ import uvicorn
 
 app = FastAPI()
 
-# 1. Load model ngôn ngữ (Model này hỗ trợ 50+ ngôn ngữ, bao gồm tiếng Việt)
-# Lần đầu chạy sẽ mất thời gian tải model (~1GB)
-print("⏳ Đang tải model AI... Vui lòng chờ.")
-model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-print("✅ Model đã sẵn sàng!")
+print("⏳ Đang tải các model AI chuyên biệt cho Tiếng Việt...")
 
-# 2. Model Kiểm duyệt (Toxic Classification)
-# Model này phát hiện: toxic, severe_toxic, obscene, threat, insult, identity_hate
-# Nếu muốn chuyên tiếng Việt sâu hơn, hãy đổi thành "uitnlp/visobert" (cần xử lý output khác một chút)
-moderation_pipeline = pipeline("text-classification", model="unitary/toxic-bert", top_k=None)
+# 1. Model Embedding Tiếng Việt (Dựa trên PhoBERT)
+# Model này tạo vector cực tốt cho tiếng Việt, hiểu từ lóng và ngữ pháp VN
+embed_model = SentenceTransformer('VoVanPhuc/sup-SimCSE-VietNamese-phobert-base')
 
-print("✅ AI Service đã sẵn sàng!")
+# 2. Model Kiểm duyệt Tiếng Việt (Vietnamese Hate Speech Detection)
+# Model này trả về các nhãn: LABEL_0 (Clean), LABEL_1 (Offensive), LABEL_2 (Hate)
+moderation_pipeline = pipeline("text-classification", model="HuyNgo/vi-hate-speech-classification")
+
+# 3. Model ảnh
+# Classify: 'normal' vs 'nsfw'
+image_moderation_pipeline = pipeline("image-classification", model="Falconsai/nsfw_image_detection")
+
+print("✅ AI Service (Vietnamese Version) đã sẵn sàng!")
+
 
 class TextRequest(BaseModel):
     text: str
@@ -25,7 +29,7 @@ class TextRequest(BaseModel):
 
 @app.get("/")
 def health_check():
-    return {"status": "AI Service is running"}
+    return {"status": "AI Service is running (Vietnamese Models)"}
 
 
 @app.post("/embed")
@@ -34,13 +38,14 @@ async def create_embedding(request: TextRequest):
         if not request.text.strip():
             raise HTTPException(status_code=400, detail="Text cannot be empty")
 
-        # Generate vector (list of floats)
-        embedding = model.encode(request.text)
+        # Generate vector
+        embedding = embed_model.encode(request.text)
 
-        # Convert numpy array to list for JSON serialization
+        # Convert numpy array to list
         return {"vector": embedding.tolist(), "dimension": len(embedding)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/moderate")
 async def moderate_content(request: TextRequest):
@@ -48,34 +53,82 @@ async def moderate_content(request: TextRequest):
         if not request.text.strip():
             return {"is_toxic": False, "reason": "Empty text"}
 
-        # Giới hạn độ dài text để tránh lỗi model (BERT thường max 512 token)
+        # Cắt ngắn text để tránh lỗi độ dài tối đa của model (thường là 256 hoặc 512 tokens)
         text_to_check = request.text[:512]
 
-        # Chạy model
-        # Kết quả trả về dạng: [[{'label': 'toxic', 'score': 0.9}, {'label': 'insult', 'score': 0.1}, ...]]
+        # Chạy model kiểm duyệt
         results = moderation_pipeline(text_to_check)
+        # Kết quả trả về dạng: [{'label': 'LABEL_0', 'score': 0.98}]
 
-        # Phân tích kết quả (Lấy danh sách các nhãn có điểm tin cậy > 0.7)
-        threshold = 0.7
-        flagged_labels = []
+        result = results[0]
+        label = result['label']
+        score = result['score']
 
-        for res in results[0]:  # pipeline trả về list of list
-            if res['score'] > threshold:
-                # Nếu label là toxic, obscene, threat, insult, identity_hate -> Chặn
-                if res['label'] != 'neutral':  # Model toxic-bert không có label neutral, nhưng logic chung là vậy
-                    flagged_labels.append(res['label'])
+        # Mapping nhãn của model HuyNgo/vi-hate-speech-classification
+        # LABEL_0: Clean (Sạch)
+        # LABEL_1: Offensive (Xúc phạm nhẹ/Thô tục)
+        # LABEL_2: Hate Speech (Ngôn từ thù địch/Phân biệt vùng miền...)
 
-        is_toxic = len(flagged_labels) > 0
+        is_toxic = False
+        reason = "Clean"
+
+        if label == 'LABEL_1':
+            is_toxic = True
+            reason = "Offensive content (Ngôn từ xúc phạm/Thô tục)"
+        elif label == 'LABEL_2':
+            is_toxic = True
+            reason = "Hate speech (Ngôn từ thù địch)"
+
+        # Nếu độ tin cậy thấp (< 0.6) thì có thể coi là an toàn để tránh block nhầm
+        if is_toxic and score < 0.6:
+            is_toxic = False
+            reason += " (Low confidence, allowed)"
 
         return {
             "is_toxic": is_toxic,
-            "flags": flagged_labels,
-            "score": results[0][0]['score']  # Điểm của label cao nhất
+            "flags": [label] if is_toxic else [],
+            "reason": reason,
+            "score": score
         }
 
     except Exception as e:
         print(f"Lỗi Moderation: {e}")
-        # Nếu lỗi AI, tạm thời cho qua (Fail-open) hoặc chặn (Fail-closed) tùy chính sách
+        # Fail-open: Nếu lỗi AI, tạm thời cho qua
+        return {"is_toxic": False, "error": str(e)}
+
+@app.post("/moderate/image")
+async def moderate_image(file: UploadFile = File(...)):
+    try:
+        # 1. Đọc file ảnh từ request
+        image_data = await file.read()
+        image = Image.open(io.BytesIO(image_data))
+
+        # 2. Chạy model dự đoán
+        results = image_moderation_pipeline(image)
+        # Kết quả dạng: [{'label': 'nsfw', 'score': 0.98}, {'label': 'normal', 'score': 0.02}]
+
+        # 3. Phân tích kết quả
+        # Lấy nhãn có điểm cao nhất
+        top_result = results[0]
+        label = top_result['label']
+        score = top_result['score']
+
+        is_toxic = False
+        reason = "Clean image"
+
+        if label == 'nsfw' and score > 0.7: # Ngưỡng 70%
+            is_toxic = True
+            reason = f"Hình ảnh nhạy cảm/NSFW ({round(score*100, 2)}%)"
+
+        return {
+            "is_toxic": is_toxic,
+            "reason": reason,
+            "score": score,
+            "label": label
+        }
+
+    except Exception as e:
+        print(f"Lỗi Image Moderation: {e}")
         return {"is_toxic": False, "error": str(e)}
 
 if __name__ == "__main__":

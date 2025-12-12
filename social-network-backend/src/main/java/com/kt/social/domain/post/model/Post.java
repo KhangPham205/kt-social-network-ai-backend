@@ -1,7 +1,6 @@
 package com.kt.social.domain.post.model;
 
 import com.kt.social.domain.comment.model.Comment;
-import com.kt.social.domain.moderation.enums.ModerationStatus;
 import com.kt.social.domain.post.enums.AccessScope;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.common.entity.BaseEntity;
@@ -9,7 +8,6 @@ import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.Type;
 
 import java.time.Instant;
@@ -24,7 +22,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @SuperBuilder
-@SQLRestriction("deleted_at IS NULL")
+//@SQLRestriction("deleted_at IS NULL")
 public class Post extends BaseEntity {
 
     @Column(nullable = false, columnDefinition = "text")
@@ -41,8 +39,6 @@ public class Post extends BaseEntity {
     private int commentCount;
 
     private int shareCount;
-
-    private ModerationStatus moderationStatus;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "share_post_id")
@@ -67,5 +63,11 @@ public class Post extends BaseEntity {
     @Version
     private Long version;
 
+    @Column(columnDefinition = "TEXT")
+    private String violationDetails;
+
     private Instant deletedAt;
+
+    // Đánh dấu là bị hệ thống xóa tự động hay admin xóa
+    private boolean isSystemBan;
 }
