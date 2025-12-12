@@ -5,8 +5,10 @@ import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.admin.dto.ChangeStatusRequest;
+import com.kt.social.domain.admin.dto.ModerationLogResponse;
 import com.kt.social.domain.admin.dto.ModerationMessageResponse;
 import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.moderation.service.ModerationService;
@@ -95,8 +97,12 @@ public class ModerationController {
             post.setDeletedAt(null);
             post.setSystemBan(false);
             postRepository.save(post);
-        } else {
+        } else if (type == TargetType.COMMENT) {
             // Tương tự cho Comment
+//            Comment comment = commentRepository.findById(id)
+//                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+//            comment.setDeletedAt(null);
+//            commentRepository.save(comment);
         }
 
         // Ghi Log Admin restore
@@ -109,5 +115,19 @@ public class ModerationController {
                 .build());
 
         return ResponseEntity.ok("Content restored successfully");
+    }
+
+    /**
+     * Lấy nhật ký kiểm duyệt (Logs)
+     * Hỗ trợ filter: action, targetType, actorName, etc.
+     * Ví dụ: /api/v1/moderation/logs?filter=action=='AUTO_BAN';type=='POST'&page=0&size=20
+     */
+    @GetMapping("/logs")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')") // Cả Admin và Mod đều xem được
+    public ResponseEntity<PageVO<ModerationLogResponse>> getModerationLogs(
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(moderationService.getModerationLogs(filter, pageable));
     }
 }

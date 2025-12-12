@@ -88,13 +88,13 @@ public class PostServiceImpl implements PostService {
 
         Post savedPost = postRepository.save(post);
 
-        activityLogService.logActivity(
-                author,
-                "POST:CREATE",
-                "Post",
-                savedPost.getId(),
-                Map.of("accessScope", savedPost.getAccessModifier().toString())
-        );
+//        activityLogService.logActivity(
+//                author,
+//                "POST:CREATE",
+//                "Post",
+//                savedPost.getId(),
+//                Map.of("accessScope", savedPost.getAccessModifier().toString())
+//        );
 
         if (savedPost.getAccessModifier() != AccessScope.PRIVATE) {
             postSyncService.syncPostToMilvus(savedPost.getId(), author.getId(), content);
@@ -162,13 +162,13 @@ public class PostServiceImpl implements PostService {
         post.setUpdatedAt(Instant.now());
         Post savedPost = postRepository.save(post);
 
-        activityLogService.logActivity(
-                currentUser,
-                "POST:UPDATE",
-                "Post",
-                savedPost.getId(),
-                Map.of("newAccessScope", savedPost.getAccessModifier().toString())
-        );
+//        activityLogService.logActivity(
+//                currentUser,
+//                "POST:UPDATE",
+//                "Post",
+//                savedPost.getId(),
+//                Map.of("newAccessScope", savedPost.getAccessModifier().toString())
+//        );
 
         return toDtoWithReactsAndShares(savedPost, currentUser.getId());
     }
@@ -246,13 +246,13 @@ public class PostServiceImpl implements PostService {
 
         Post savedSharedPost = postRepository.save(shared);
 
-        activityLogService.logActivity(
-                currentUser,
-                "POST:SHARE",
-                "Post",
-                savedSharedPost.getId(),
-                Map.of("originalPostId", originalPostId)
-        );
+//        activityLogService.logActivity(
+//                currentUser,
+//                "POST:SHARE",
+//                "Post",
+//                savedSharedPost.getId(),
+//                Map.of("originalPostId", originalPostId)
+//        );
 
         return toDtoWithReactsAndShares(savedSharedPost, currentUser.getId());
     }
@@ -329,13 +329,13 @@ public class PostServiceImpl implements PostService {
 
         postRepository.delete(post);
 
-        activityLogService.logActivity(
-                currentUser,
-                "POST:DELETE",
-                "Post",
-                postId,
-                Map.of("deletedPostAuthorId", post.getAuthor().getId())
-        );
+//        activityLogService.logActivity(
+//                currentUser,
+//                "POST:DELETE",
+//                "Post",
+//                postId,
+//                Map.of("deletedPostAuthorId", post.getAuthor().getId())
+//        );
     }
 
     // --------------------- Helper methods -------------------------

@@ -1,10 +1,8 @@
 package com.kt.social.domain.comment.service.impl;
 
 import com.kt.social.common.exception.AccessDeniedException;
-import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.comment.dto.CommentRequest;
 import com.kt.social.domain.comment.dto.CommentResponse;
 import com.kt.social.domain.comment.dto.UpdateCommentRequest;
@@ -54,7 +52,7 @@ public class CommentServiceImpl implements CommentService {
     private final ReactService reactService;
     private final StorageService storageService;
     private final NotificationService notificationService;
-    private final ActivityLogService activityLogService;
+//    private final ActivityLogService activityLogService;
 
     // ---------------- CREATE ----------------
     @Override
@@ -124,13 +122,13 @@ public class CommentServiceImpl implements CommentService {
         }
 
         String action = (parent == null) ? "COMMENT:CREATE" : "COMMENT:REPLY";
-        activityLogService.logActivity(
-                author,
-                action,
-                "Comment",
-                saved.getId(),
-                Map.of("postId", post.getId())
-        );
+//        activityLogService.logActivity(
+//                author,
+//                action,
+//                "Comment",
+//                saved.getId(),
+//                Map.of("postId", post.getId())
+//        );
 
         return toDtoWithChildrenAndReacts(saved, author.getId(), 0);
     }
@@ -195,13 +193,13 @@ public class CommentServiceImpl implements CommentService {
                 saved.getAuthor().getId()
         ));
 
-        activityLogService.logActivity(
-                current,
-                "COMMENT:UPDATE",
-                "Comment",
-                saved.getId(),
-                Map.of("postId", comment.getPost().getId())
-        );
+//        activityLogService.logActivity(
+//                current,
+//                "COMMENT:UPDATE",
+//                "Comment",
+//                saved.getId(),
+//                Map.of("postId", comment.getPost().getId())
+//        );
 
         return toDtoWithChildrenAndReacts(saved, current.getId(), -1);
     }
@@ -268,14 +266,14 @@ public class CommentServiceImpl implements CommentService {
         commentRepository.delete(comment);
         safeUpdateCommentCount(comment.getPost().getId(), -1);
 
-        activityLogService.logActivity(
-                current,
-                "COMMENT:DELETE",
-                "Comment",
-                id,
-                Map.of("postId", comment.getPost().getId(),
-                        "deletedCommentAuthorId", comment.getAuthor().getId())
-        );
+//        activityLogService.logActivity(
+//                current,
+//                "COMMENT:DELETE",
+//                "Comment",
+//                id,
+//                Map.of("postId", comment.getPost().getId(),
+//                        "deletedCommentAuthorId", comment.getAuthor().getId())
+//        );
     }
 
     // ---------------- SAFE UPDATE COMMENT COUNT WITH RETRY ----------------

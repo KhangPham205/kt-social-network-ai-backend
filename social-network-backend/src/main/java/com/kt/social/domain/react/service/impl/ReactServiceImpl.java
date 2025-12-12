@@ -64,13 +64,13 @@ public class ReactServiceImpl implements ReactService {
                 reactRepository.save(existing);
                 isNewReact = true;
 
-                activityLogService.logActivity(
-                        user,
-                        "REACT:UPDATE",
-                        tType.name(),
-                        targetId,
-                        Map.of("newReactTypeId", req.getReactTypeId())
-                );
+//                activityLogService.logActivity(
+//                        user,
+//                        "REACT:UPDATE",
+//                        tType.name(),
+//                        targetId,
+//                        Map.of("newReactTypeId", req.getReactTypeId())
+//                );
             }
         } else {
             // Chưa có → thêm mới
@@ -86,13 +86,13 @@ public class ReactServiceImpl implements ReactService {
             );
             isNewReact = true;
 
-            activityLogService.logActivity(
-                    user,
-                    "REACT:CREATE",
-                    tType.name(),
-                    targetId,
-                    Map.of("reactTypeId", req.getReactTypeId())
-            );
+//            activityLogService.logActivity(
+//                    user,
+//                    "REACT:CREATE",
+//                    tType.name(),
+//                    targetId,
+//                    Map.of("reactTypeId", req.getReactTypeId())
+//            );
         }
 
         // Cập nhật đếm (sử dụng countBy để không cần fetch all)

@@ -5,6 +5,8 @@ import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
+import com.kt.social.domain.moderation.model.ModerationLog;
+import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.enums.TargetType;
@@ -37,6 +39,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ReportServiceImpl implements ReportService {
 
+    private final ModerationLogRepository moderationLogRepository;
     private final ReportRepository reportRepository;
     private final ComplaintRepository complaintRepository;
     private final UserRepository userRepository;
@@ -95,6 +98,14 @@ public class ReportServiceImpl implements ReportService {
         // 3. Xử lý xóa nội dung nếu APPROVED
         if (request.getStatus() == ReportStatus.APPROVED) {
             softDeleteContent(report.getTargetType(), report.getTargetId());
+
+            saveModerationLog(
+                    admin,
+                    report.getTargetType(),
+                    report.getTargetId(),
+                    "ADMIN_BAN",
+                    "Report Approved: " + request.getNote()
+            );
         }
 
         return reportMapper.toResponse(reportRepository.save(report));
@@ -152,6 +163,7 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional
     public ComplaintResponse resolveComplaint(Long complaintId, ResolveComplaintRequest request) {
+        User currentResolver = userService.getCurrentUser();
         Complaint complaint = complaintRepository.findById(complaintId)
                 .orElseThrow(() -> new ResourceNotFoundException("Complaint not found"));
 
@@ -171,6 +183,14 @@ public class ReportServiceImpl implements ReportService {
                     .timestamp(Instant.now())
                     .build());
             reportRepository.save(report);
+
+            saveModerationLog(
+                    currentResolver,
+                    complaint.getReport().getTargetType(),
+                    complaint.getReport().getTargetId(),
+                    "ADMIN_RESTORE",
+                    "Appeal Approved: " + request.getAdminNote()
+            );
         }
 
         return reportMapper.toResponse(complaintRepository.save(complaint));
@@ -204,5 +224,16 @@ public class ReportServiceImpl implements ReportService {
                 commentRepository.save(comment);
             });
         }
+    }
+
+    private void saveModerationLog(User actor, TargetType targetType, Long targetId, String action, String reason) {
+        ModerationLog log = ModerationLog.builder()
+                .actor(actor)
+                .targetType(targetType)
+                .targetId(targetId)
+                .action(action)
+                .reason(reason)
+                .build();
+        moderationLogRepository.save(log);
     }
 }

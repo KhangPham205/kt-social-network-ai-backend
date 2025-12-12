@@ -2,10 +2,13 @@ package com.kt.social.domain.moderation.service;
 
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
+import com.kt.social.domain.admin.dto.ModerationLogResponse;
 import com.kt.social.domain.admin.dto.ModerationMessageResponse;
 import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
+import com.kt.social.domain.moderation.model.ModerationLog;
+import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
 import com.kt.social.domain.report.enums.ReportStatus;
@@ -14,12 +17,15 @@ import com.kt.social.domain.report.model.Report;
 import com.kt.social.domain.report.repository.ReportRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
+import io.github.perplexhub.rsql.RSQLJPASupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,6 +38,7 @@ public class ModerationServiceImpl implements ModerationService {
     private final ConversationRepository conversationRepository;
     private final ReportRepository reportRepository;
     private final ReportMapper reportMapper;
+    private final ModerationLogRepository moderationLogRepository;
 
     @Transactional(readOnly = true)
     public ModerationUserDetailResponse getUserDetailForAdmin(Long userId) {
@@ -120,6 +127,53 @@ public class ModerationServiceImpl implements ModerationService {
                 .totalPages(page.getTotalPages())
                 .numberOfElements(content.size())
                 .content(content)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<ModerationLogResponse> getModerationLogs(String filter, Pageable pageable) {
+        Specification<ModerationLog> spec = Specification.where(null);
+
+        if (filter != null && !filter.isBlank()) {
+            // Mapping các alias để filter dễ hơn
+            Map<String, String> propertyPathMapper = new HashMap<>();
+            propertyPathMapper.put("actorId", "actor.id");
+            propertyPathMapper.put("actorName", "actor.displayName");
+            propertyPathMapper.put("type", "targetType"); // filter=type=='POST'
+
+            spec = RSQLJPASupport.toSpecification(filter, propertyPathMapper);
+        }
+
+        Page<ModerationLog> page = moderationLogRepository.findAll(spec, pageable);
+
+        List<ModerationLogResponse> content = page.getContent().stream()
+                .map(this::mapLogToResponse)
+                .toList();
+
+        return PageVO.<ModerationLogResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    // Helper map entity -> dto
+    private ModerationLogResponse mapLogToResponse(ModerationLog log) {
+        return ModerationLogResponse.builder()
+                .id(log.getId())
+                .targetType(log.getTargetType())
+                .targetId(log.getTargetId())
+                .action(log.getAction())
+                .reason(log.getReason())
+                .createdAt(log.getCreatedAt())
+                // Xử lý Actor: Nếu actor null nghĩa là System/AI thực hiện
+                .actorId(log.getActor() != null ? log.getActor().getId() : null)
+                .actorName(log.getActor() != null ? log.getActor().getDisplayName() : "System (AI)")
+                .actorAvatar(log.getActor() != null ? log.getActor().getAvatarUrl() : null)
                 .build();
     }
 }

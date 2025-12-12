@@ -112,13 +112,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
         userRepository.save(user);
 
-        activityLogService.logActivity(
-                user,
-                "USER:UPDATE_PROFILE",
-                "USER",
-                user.getId(),
-                null
-        );
+//        activityLogService.logActivity(
+//                user,
+//                "USER:UPDATE_PROFILE",
+//                "USER",
+//                user.getId(),
+//                null
+//        );
 
         return userMapper.toDto(user);
     }
@@ -146,13 +146,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
         userRelaRepository.save(rela);
 
-        activityLogService.logActivity(
-                follower,
-                "USER:FOLLOW",
-                "USER",
-                targetId,
-                null
-        );
+//        activityLogService.logActivity(
+//                follower,
+//                "USER:FOLLOW",
+//                "USER",
+//                targetId,
+//                null
+//        );
 
         return new FollowResponse("Followed successfully", true);
     }
@@ -176,13 +176,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
         userRelaRepository.deleteByFollowerAndFollowing(follower, following);
 
-        activityLogService.logActivity(
-                follower,
-                "USER:UNFOLLOW",
-                "USER",
-                targetId,
-                null
-        );
+//        activityLogService.logActivity(
+//                follower,
+//                "USER:UNFOLLOW",
+//                "USER",
+//                targetId,
+//                null
+//        );
 
         return new FollowResponse("Unfollowed successfully", false);
     }
@@ -199,13 +199,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
 
         userRelaRepository.deleteByFollowerAndFollowing(follower, current);
 
-        activityLogService.logActivity(
-                current, // (Actor là 'current' - người thực hiện)
-                "USER:REMOVE_FOLLOWER",
-                "USER", // (Target là 'follower')
-                followerId,
-                null
-        );
+//        activityLogService.logActivity(
+//                current, // (Actor là 'current' - người thực hiện)
+//                "USER:REMOVE_FOLLOWER",
+//                "USER", // (Target là 'follower')
+//                followerId,
+//                null
+//        );
 
         return new FollowResponse("Removed follower successfully", false);
     }
@@ -225,13 +225,13 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         user.setAvatarUrl(avatarUrl);
         userRepository.save(user);
 
-        activityLogService.logActivity(
-                user,
-                "USER:UPDATE_AVATAR",
-                "USER",
-                user.getId(),
-                Map.of("newAvatarUrl", avatarUrl)
-        );
+//        activityLogService.logActivity(
+//                user,
+//                "USER:UPDATE_AVATAR",
+//                "USER",
+//                user.getId(),
+//                Map.of("newAvatarUrl", avatarUrl)
+//        );
 
         return userMapper.toDto(user);
     }
@@ -272,9 +272,6 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         // 4. Cập nhật trạng thái trong UserCredential
         UserCredential credential = targetUser.getCredential();
         credential.setStatus(newStatus);
-
-        // Nếu bị khóa -> Set isActive = false (nếu logic login của bạn check field này)
-        // targetUser.setIsActive(newStatus == AccountStatus.ACTIVE);
 
         userCredentialRepository.save(credential);
         // userRepository.save(targetUser); // Nếu có thay đổi ở bảng User
