@@ -73,6 +73,12 @@ public final class ApiConstants {
     public static final String REPORTS = API_V1 + "/reports";
 
     /**
+     * Đường dẫn gốc cho Complaint Controller
+     * (Ví dụ: /api/v1/complaints)
+     */
+    public static final String COMPLAINTS = API_V1 + "/complaints";
+
+    /**
      * Đường dẫn gốc cho Moderation Controller
      * (Ví dụ: /api/v1/moderation)
      */

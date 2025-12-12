@@ -9,8 +9,10 @@ import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.Type;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @SuperBuilder
+@SQLRestriction("deleted_at IS NULL")
 public class Post extends BaseEntity {
 
     @Column(nullable = false, columnDefinition = "text")
@@ -63,4 +66,6 @@ public class Post extends BaseEntity {
      */
     @Version
     private Long version;
+
+    private Instant deletedAt;
 }

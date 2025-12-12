@@ -22,4 +22,14 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
         having count(distinct m.user.id) = 2
         """)
     Optional<Conversation> findDirectConversationBetween(@Param("userIds") List<Long> userIds);
+
+    @Query(value = """
+        SELECT * FROM conversations c
+        WHERE EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(c.messages) AS msg
+            WHERE msg->>'id' = :messageId
+        )
+    """, nativeQuery = true)
+    Optional<Conversation> findByMessageIdInJson(@Param("messageId") String messageId);
 }

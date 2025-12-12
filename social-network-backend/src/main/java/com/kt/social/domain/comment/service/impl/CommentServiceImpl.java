@@ -194,6 +194,16 @@ public class CommentServiceImpl implements CommentService {
         return toDtoWithChildrenAndReacts(saved, current.getId(), -1);
     }
 
+    @Override
+    public CommentResponse getCommentById(Long id) {
+        Comment comment = commentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
+        User currentUser = userService.getCurrentUser();
+
+        return toDtoWithChildrenAndReacts(comment, currentUser.getId(), -1);
+    }
+
     // ---------------- GET COMMENT ROOT (depth 0) ----------------
     @Override
     @Transactional(readOnly = true)

@@ -20,6 +20,13 @@ public class CommentController {
 
     private final CommentService commentService;
 
+    @GetMapping("/{id}")
+    public ResponseEntity<CommentResponse> getCommentById(
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(commentService.getCommentById(id));
+    }
+
     @GetMapping("/post/{postId}")
     public ResponseEntity<PageVO<CommentResponse>> getCommentsByPost(
             @PathVariable Long postId,

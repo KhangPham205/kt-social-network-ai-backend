@@ -1,6 +1,5 @@
 package com.kt.social.config;
 
-// ... (Các import của bạn giữ nguyên)
 import com.kt.social.auth.model.Permission;
 import com.kt.social.auth.model.Role;
 import com.kt.social.auth.model.UserCredential;
@@ -10,7 +9,6 @@ import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.model.UserInfo;
-import com.kt.social.domain.user.repository.UserInfoRepository;
 import com.kt.social.domain.user.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +29,6 @@ public class DataInitializer {
     private final UserCredentialRepository userCredentialRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
-    private final UserInfoRepository userInfoRepository;
 
     @Value("${admin.username}")
     private String adminUsername;
@@ -42,12 +39,16 @@ public class DataInitializer {
     @PostConstruct
     @Transactional
     public void init() {
-        System.out.println("Initializing default roles, permissions, and admin account...");
+        System.out.println("Initializing system data (Roles, Permissions, Admin)...");
 
+        // 1. ROLES
         Role userRole = findOrCreateRole("USER", "Standard user role");
         Role adminRole = findOrCreateRole("ADMIN", "Administrator role");
-        Role moderatorRole = findOrCreateRole("MODERATOR", "Moderation role");
+        Role moderatorRole = findOrCreateRole("MODERATOR", "Content Moderator role");
 
+        // 2. PERMISSIONS
+
+        // --- Post & Comment (User Basic) ---
         Permission createPost = findOrCreatePermission("POST", "CREATE", "Create a new post");
         Permission updatePost = findOrCreatePermission("POST", "UPDATE", "Update own post");
         Permission deletePost = findOrCreatePermission("POST", "DELETE", "Delete own post");
@@ -55,43 +56,78 @@ public class DataInitializer {
         Permission updateComment = findOrCreatePermission("COMMENT", "UPDATE", "Update own comment");
         Permission deleteComment = findOrCreatePermission("COMMENT", "DELETE", "Delete own comment");
 
-        Permission deleteAnyPost = findOrCreatePermission("POST", "DELETE_ANY", "Delete any post");
-        Permission deleteAnyComment = findOrCreatePermission("COMMENT", "DELETE_ANY", "Delete any comment");
-        Permission readAdminDashboard = findOrCreatePermission("ADMIN", "READ", "Access Admin Dashboard");
-        Permission createStaff = findOrCreatePermission("USER", "CREATE", "Create new Staff Account (Admin/Mod)");
-        Permission deleteUser = findOrCreatePermission("USER", "DELETE", "Delete any User Account");
-
-        Permission readAllUsers = findOrCreatePermission("USER", "READ_ALL", "Read all user profiles (Admin)");
-        Permission updateAnyUser = findOrCreatePermission("USER", "UPDATE_ANY", "Update any user profile/role (Admin)");
-        Permission deleteAnyUser = findOrCreatePermission("USER", "DELETE_ANY", "Delete/Ban any user (Admin)");
-
+        // --- User Actions (Report & Complaint) ---
         Permission createReport = findOrCreatePermission("REPORT", "CREATE", "Create a new report");
+        Permission createComplaint = findOrCreatePermission("COMPLAINT", "CREATE", "Create a complaint for banned content");
 
-        Permission readModQueue = findOrCreatePermission("MODERATION", "READ", "Read moderation queues (reports)");
-        Permission updateModQueue = findOrCreatePermission("MODERATION", "UPDATE", "Review/Action reports");
+        // --- Moderation Actions (Dành cho Mod/Admin) ---
+        // Xóa nội dung bất kỳ
+        Permission deleteAnyPost = findOrCreatePermission("POST", "DELETE_ANY", "Delete any post (Moderation)");
+        Permission deleteAnyComment = findOrCreatePermission("COMMENT", "DELETE_ANY", "Delete any comment (Moderation)");
 
+        // Xử lý Report
+        Permission viewAllReports = findOrCreatePermission("REPORT", "VIEW_ALL", "View all reports");
+        Permission processReport = findOrCreatePermission("REPORT", "PROCESS", "Approve or Reject reports");
+
+        // Xử lý Complaint (Khiếu nại)
+        Permission resolveComplaint = findOrCreatePermission("COMPLAINT", "RESOLVE", "Resolve user complaints");
+
+        // Quản lý User (Khóa/Mở khóa/Xem tin riêng tư)
+        Permission blockUser = findOrCreatePermission("USER", "BLOCK", "Block/Unblock user account");
+        Permission readSensitiveUser = findOrCreatePermission("USER", "READ_SENSITIVE", "View sensitive user info (email, violations)");
+        Permission readAnyMessage = findOrCreatePermission("MESSAGE", "READ_ANY", "Read any message content for moderation");
+        Permission moderationAccess = findOrCreatePermission("MODERATION", "ACCESS", "Access Moderation Dashboard");
+
+        // --- Admin Only ---
+        Permission readAdminDashboard = findOrCreatePermission("ADMIN", "READ", "Access Admin Dashboard");
+        Permission createStaff = findOrCreatePermission("USER", "CREATE", "Create new Staff Account");
+        Permission readAllUsers = findOrCreatePermission("USER", "READ_ALL", "Read list of all users");
+        Permission updateAnyUser = findOrCreatePermission("USER", "UPDATE_ANY", "Update any user profile");
+        Permission deleteAnyUser = findOrCreatePermission("USER", "DELETE_ANY", "Hard delete user data");
+
+
+        // 3. ASSIGN PERMISSIONS
+
+        // -> USER: Đăng bài, cmt, report, khiếu nại
         assignPermissions(userRole, Set.of(
                 createPost, updatePost, deletePost,
                 createComment, updateComment, deleteComment,
-                createReport
+                createReport, createComplaint // <-- Mới thêm
         ));
 
+        // -> MODERATOR: Xóa bài, Xử lý report/khiếu nại, Khóa user, Xem info nhạy cảm
         assignPermissions(moderatorRole, Set.of(
                 deleteAnyPost, deleteAnyComment,
-                readModQueue, updateModQueue
+                viewAllReports, processReport, // <-- Mới thêm
+                resolveComplaint,              // <-- Mới thêm
+                blockUser, readSensitiveUser,  // <-- Mới thêm
+                readAnyMessage, moderationAccess // <-- Mới thêm
         ));
 
-        assignPermissions(adminRole, Set.of(
-                createPost, updatePost, deletePost,
-                createComment, updateComment, deleteComment,
-                deleteAnyPost, deleteAnyComment,
-                readAdminDashboard, createStaff, deleteUser,
-                readAllUsers, updateAnyUser, deleteAnyUser,
-                readModQueue, updateModQueue
+        // -> ADMIN: Full quyền Mod + Quản trị hệ thống
+        Set<Permission> adminPermissions = new HashSet<>();
+        // Admin làm được mọi thứ User làm
+        adminPermissions.addAll(userRole.getPermissions());
+        // Admin làm được mọi thứ Mod làm
+        adminPermissions.addAll(moderatorRole.getPermissions());
+        // Quyền riêng của Admin
+        adminPermissions.addAll(Set.of(
+                readAdminDashboard, createStaff,
+                readAllUsers, updateAnyUser, deleteAnyUser
         ));
 
+        assignPermissions(adminRole, adminPermissions);
+
+        // 4. CREATE DEFAULT ADMIN
+        createDefaultAdmin(adminRole);
+
+        System.out.println("✅ Initialization completed successfully.");
+    }
+
+    // -------------------- Helper methods --------------------
+
+    private void createDefaultAdmin(Role adminRole) {
         if (!userCredentialRepository.existsByUsername(adminUsername)) {
-
             UserCredential adminCredential = UserCredential.builder()
                     .username(adminUsername)
                     .email("admin@social.local")
@@ -102,10 +138,11 @@ public class DataInitializer {
 
             User adminUser = User.builder()
                     .displayName("Administrator")
+                    .avatarUrl("https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff")
                     .build();
 
             UserInfo adminInfo = UserInfo.builder()
-                    .bio("Tài khoản quản trị viên")
+                    .bio("System Administrator")
                     .build();
 
             adminCredential.setUser(adminUser);
@@ -114,15 +151,11 @@ public class DataInitializer {
             adminInfo.setUser(adminUser);
 
             userRepository.save(adminUser);
-            System.out.println("✅ Default admin account (với profile) created: " + adminUsername);
+            System.out.println("✅ Default admin created: " + adminUsername);
         } else {
-            System.out.println("ℹ️ Admin account already exists, skipping creation.");
+            System.out.println("ℹ️ Admin account already exists.");
         }
-
-        System.out.println("✅ Initialization completed successfully.");
     }
-
-    // -------------------- Helper methods --------------------
 
     private Role findOrCreateRole(String name, String description) {
         return roleRepository.findByName(name.toUpperCase())
@@ -131,9 +164,7 @@ public class DataInitializer {
                             .name(name.toUpperCase())
                             .description(description)
                             .build();
-                    roleRepository.save(newRole);
-                    System.out.println("🟢 Created role: " + name.toUpperCase());
-                    return newRole;
+                    return roleRepository.save(newRole);
                 });
     }
 
@@ -144,29 +175,30 @@ public class DataInitializer {
                     Permission newPerm = Permission.builder()
                             .resource(resource.toUpperCase())
                             .action(action.toUpperCase())
-                            .name(name) // Tên chuẩn hóa
+                            .name(name)
                             .description(description)
                             .build();
-                    permissionRepository.save(newPerm);
-                    System.out.println("🟢 Created permission: " + name);
-                    return newPerm;
+                    return permissionRepository.save(newPerm);
                 });
     }
 
     private void assignPermissions(Role role, Set<Permission> permissions) {
-        boolean updated = false;
         if (role.getPermissions() == null) {
             role.setPermissions(new HashSet<>());
         }
-        for (Permission permission : permissions) {
-            if (!role.getPermissions().contains(permission)) {
-                role.getPermissions().add(permission);
-                updated = true;
+
+        // Thêm quyền mới nếu chưa có
+        boolean changed = false;
+        for (Permission p : permissions) {
+            if (!role.getPermissions().contains(p)) {
+                role.getPermissions().add(p);
+                changed = true;
             }
         }
-        if (updated) {
+
+        if (changed) {
             roleRepository.save(role);
-            System.out.println("Updated permissions for role: " + role.getName());
+            System.out.println("🔄 Updated permissions for role: " + role.getName());
         }
     }
 }

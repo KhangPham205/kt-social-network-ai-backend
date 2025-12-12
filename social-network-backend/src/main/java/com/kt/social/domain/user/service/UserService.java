@@ -1,5 +1,6 @@
 package com.kt.social.domain.user.service;
 
+import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.admin.dto.AdminUpdateUserRequest;
 import com.kt.social.domain.admin.dto.AdminUserViewDto;
@@ -25,6 +26,8 @@ public interface UserService {
     UserProfileDto updateAvatar(MultipartFile avatarFile);
     UserRelationDto getRelationWithUser(Long targetUserId);
 
+    // Thêm phương thức này vào Interface
+    void updateUserStatus(Long userId, AccountStatus newStatus, String reason);
     PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable);
     AdminUserViewDto getUserByIdAsAdmin(Long userId);
     AdminUserViewDto updateUserAsAdmin(Long userId, AdminUpdateUserRequest request);

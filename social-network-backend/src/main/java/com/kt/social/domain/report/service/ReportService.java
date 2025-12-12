@@ -1,18 +1,16 @@
 package com.kt.social.domain.report.service;
 
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.report.dto.ReportDto;
-import com.kt.social.domain.report.dto.ReportRequestDto;
-import com.kt.social.domain.report.dto.ReportReviewDto;
-import com.kt.social.domain.report.enums.ReportStatus;
+import com.kt.social.domain.report.dto.*;
 import org.springframework.data.domain.Pageable;
 
 public interface ReportService {
-    // (Cho User)
-    ReportDto createReport(Long reporterId, ReportRequestDto request);
+    // Report
+    ReportResponse createReport(Long reporterId, CreateReportRequest request);
+    ReportResponse processReport(Long reportId, ProcessReportRequest request);
+    PageVO<ReportResponse> getReports(String filter, Pageable pageable);
 
-    // (Cho Moderator)
-    PageVO<ReportDto> getReports(String filter, ReportStatus status, Pageable pageable);
-
-    ReportDto reviewReport(Long reportId, ReportReviewDto request, Long reviewerId);
+    // Complaint
+    ComplaintResponse createComplaint(CreateComplaintRequest request);
+    ComplaintResponse resolveComplaint(Long complaintId, ResolveComplaintRequest request);
 }

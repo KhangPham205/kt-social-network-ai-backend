@@ -1,5 +1,6 @@
 package com.kt.social.domain.report.model;
 
+import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.enums.ReportReason;
 import com.kt.social.domain.report.enums.ReportStatus;
 import com.kt.social.domain.report.enums.ReportableType;
@@ -10,8 +11,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
+import java.io.Serializable;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "reports")
@@ -32,7 +38,7 @@ public class Report {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ReportableType targetType; // Loại bị báo cáo (POST, COMMENT, USER, APPEAL)
+    private TargetType targetType; // Loại bị báo cáo (POST, COMMENT, USER, APPEAL)
 
     @Column(nullable = false)
     private Long targetId; // ID của post/comment/user bị báo cáo
@@ -53,11 +59,21 @@ public class Report {
     @Column(nullable = false)
     private ReportStatus status = ReportStatus.PENDING; // Mặc định là PENDING
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reviewer_id")
-    private User reviewer; // Moderator đã duyệt
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<ReportHistory> history = new ArrayList<>(); // Lịch sử xử lý
 
-    private String moderatorNotes; // Ghi chú của Mod
-
-    private Instant reviewedAt;
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ReportHistory implements Serializable {
+        private Long actorId;       // ID người thực hiện (Admin)
+        private String actorName;   // Tên admin (lưu cứng để lỡ xóa user vẫn còn tên)
+        private ReportStatus oldStatus;
+        private ReportStatus newStatus;
+        private String note;        // Ghi chú của Admin
+        private Instant timestamp;
+    }
 }
