@@ -66,8 +66,10 @@ public class Post extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String violationDetails;
 
+    @Column(name = "deleted_at")
     private Instant deletedAt;
 
     // Đánh dấu là bị hệ thống xóa tự động hay admin xóa
+    @Column(name = "is_system_ban")
     private boolean isSystemBan;
 }

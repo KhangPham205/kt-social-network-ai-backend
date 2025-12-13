@@ -32,6 +32,9 @@ public class PostResponse {
 
     private ReactSummaryDto reactSummary;
 
+    private boolean isSystemBan;
+
     private Instant createdAt;
     private Instant updatedAt;
+    private Instant deletedAt;
 }
