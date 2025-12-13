@@ -7,3 +7,5 @@ torch==2.2.0 --index-url https://download.pytorch.org/whl/cpu
 transformers==4.37.2
 pillow
 python-multipart
+sentencepiece
+protobuf
