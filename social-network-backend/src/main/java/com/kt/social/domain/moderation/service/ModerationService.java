@@ -1,9 +1,10 @@
 package com.kt.social.domain.moderation.service;
 
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.admin.dto.ModerationLogResponse;
 import com.kt.social.domain.admin.dto.ModerationMessageResponse;
 import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.moderation.dto.ModerationLogResponse;
+import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,4 +16,6 @@ public interface ModerationService {
 
     @Transactional(readOnly = true)
     PageVO<ModerationLogResponse> getModerationLogs(String filter, Pageable pageable);
+
+    void restoreContent(Long id, TargetType targetType);
 }

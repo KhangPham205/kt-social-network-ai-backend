@@ -1,5 +1,6 @@
 package com.kt.social.domain.post.service.impl;
 
+import com.kt.social.auth.model.Role;
 import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
@@ -451,6 +452,10 @@ public class PostServiceImpl implements PostService {
             return; // Tác giả luôn xem được
         }
 
+        if (canView(viewer.getCredential().getRoles())) {
+            return;
+        }
+
         switch (post.getAccessModifier()) {
             case PRIVATE:
                 throw new AccessDeniedException("You don't have permission to view this private post");
@@ -491,4 +496,17 @@ public class PostServiceImpl implements PostService {
         String ext = getExtension(url);
         return isVideo(ext) ? "video" : "image";
     }
+
+
+    private boolean canView(Set<Role> roles) {
+        if (roles == null || roles.isEmpty()) return false;
+
+        return roles.stream()
+                .filter(Objects::nonNull)
+                .map(Role::getName)
+                .filter(Objects::nonNull)
+                .map(String::toUpperCase)
+                .anyMatch(n -> n.equals("ADMIN") || n.equals("MODERATOR"));
+    }
+
 }

@@ -5,15 +5,18 @@ import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.admin.dto.ChangeStatusRequest;
-import com.kt.social.domain.admin.dto.ModerationLogResponse;
 import com.kt.social.domain.admin.dto.ModerationMessageResponse;
 import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
-import com.kt.social.domain.comment.model.Comment;
+import com.kt.social.domain.comment.dto.CommentResponse;
+import com.kt.social.domain.comment.service.CommentService;
+import com.kt.social.domain.moderation.dto.ModerationLogResponse;
 import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.moderation.service.ModerationService;
+import com.kt.social.domain.post.dto.PostResponse;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
+import com.kt.social.domain.post.service.PostService;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
 import com.kt.social.domain.user.model.User;
@@ -25,12 +28,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping(ApiConstants.MODERATION)
 @RequiredArgsConstructor
 public class ModerationController {
 
     private final UserService userService;
+    private final CommentService commentService;
+    private final PostService postService;
     private final ModerationService moderationService;
     private final PostRepository postRepository;
     private final ModerationLogRepository moderationLogRepository;
@@ -85,38 +92,22 @@ public class ModerationController {
         return ResponseEntity.ok("User has been unblocked successfully.");
     }
 
+    /**
+     * Endpoint khôi phục nội dung đã bị xóa (Post, Comment)
+     * Truy cập: Admin, Moderator
+     */
     @PutMapping("/{type}/{id}/restore")
     @PreAuthorize("hasAnyAuthority('POST:DELETE_ANY', 'MODERATION:ACCESS')")
-    public ResponseEntity<String> restoreContent(
+    public ResponseEntity<Map<String, String>> restoreContent(
             @PathVariable TargetType type,
             @PathVariable Long id
     ) {
-        User admin = userService.getCurrentUser();
-
-        if (type == TargetType.POST) {
-            Post post = postRepository.findById(id) // Cần repo tìm cả bài đã xóa (Native Query hoặc tắt filter)
-                    .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-            post.setDeletedAt(null);
-            post.setSystemBan(false);
-            postRepository.save(post);
-        } else if (type == TargetType.COMMENT) {
-            // Tương tự cho Comment
-//            Comment comment = commentRepository.findById(id)
-//                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
-//            comment.setDeletedAt(null);
-//            commentRepository.save(comment);
-        }
-
-        // Ghi Log Admin restore
-        moderationLogRepository.save(ModerationLog.builder()
-                .targetType(type)
-                .targetId(id)
-                .action("ADMIN_RESTORE")
-                .actor(admin)
-                .reason("Admin restored content")
-                .build());
-
-        return ResponseEntity.ok("Content restored successfully");
+        moderationService.restoreContent(id, type);
+        return ResponseEntity.ok(Map.of(
+                "message", "Content has been restored successfully.",
+                "status", "success",
+                "code", "200"
+        ));
     }
 
     /**
@@ -131,5 +122,17 @@ public class ModerationController {
             @ParameterObject Pageable pageable
     ) {
         return ResponseEntity.ok(moderationService.getModerationLogs(filter, pageable));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CommentResponse> getCommentById(
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(commentService.getCommentById(id));
+    }
+
+    @GetMapping("/{postId}")
+    public ResponseEntity<PostResponse> getPostById(@PathVariable Long postId) {
+        return ResponseEntity.ok(postService.getPostById(postId));
     }
 }

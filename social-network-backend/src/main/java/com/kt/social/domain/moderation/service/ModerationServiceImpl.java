@@ -2,13 +2,17 @@ package com.kt.social.domain.moderation.service;
 
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.admin.dto.ModerationLogResponse;
 import com.kt.social.domain.admin.dto.ModerationMessageResponse;
 import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.comment.model.Comment;
+import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
+import com.kt.social.domain.moderation.dto.ModerationLogResponse;
 import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
+import com.kt.social.domain.post.model.Post;
+import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
 import com.kt.social.domain.report.enums.ReportStatus;
@@ -17,6 +21,7 @@ import com.kt.social.domain.report.model.Report;
 import com.kt.social.domain.report.repository.ReportRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
+import com.kt.social.domain.user.service.UserService;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -34,11 +39,14 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class ModerationServiceImpl implements ModerationService {
 
+    private final UserService userService;
     private final UserRepository userRepository;
     private final ConversationRepository conversationRepository;
     private final ReportRepository reportRepository;
     private final ReportMapper reportMapper;
     private final ModerationLogRepository moderationLogRepository;
+    private final PostRepository postRepository;
+    private final CommentRepository commentRepository;
 
     @Transactional(readOnly = true)
     public ModerationUserDetailResponse getUserDetailForAdmin(Long userId) {
@@ -159,6 +167,33 @@ public class ModerationServiceImpl implements ModerationService {
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
+    }
+
+    @Override
+    public void restoreContent(Long id, TargetType targetType) {
+        User admin = userService.getCurrentUser();
+
+        if (targetType == TargetType.POST) {
+            Post post = postRepository.findById(id) // Cần repo tìm cả bài đã xóa (Native Query hoặc tắt filter)
+                    .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+            post.setDeletedAt(null);
+            post.setSystemBan(false);
+            postRepository.save(post);
+        } else if (targetType == TargetType.COMMENT) {
+            Comment comment = commentRepository.findById(id)
+                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+            comment.setDeletedAt(null);
+            commentRepository.save(comment);
+        }
+
+        // Ghi Log Admin restore
+        moderationLogRepository.save(ModerationLog.builder()
+                .targetType(targetType)
+                .targetId(id)
+                .action("ADMIN_RESTORE")
+                .actor(admin)
+                .reason("Admin restored content")
+                .build());
     }
 
     // Helper map entity -> dto
