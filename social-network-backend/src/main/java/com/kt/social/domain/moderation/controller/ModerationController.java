@@ -62,10 +62,11 @@ public class ModerationController {
     @PutMapping("/users/{id}/block")
     @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
     public ResponseEntity<String> blockUser(
+            @PathVariable Long id,
             @RequestBody ChangeStatusRequest request
     ) {
         String reason = (request != null) ? request.getReason() : "";
-        userService.updateUserStatus(request.getId(), AccountStatus.BLOCKED, reason);
+        userService.updateUserStatus(id, AccountStatus.BLOCKED, reason);
         return ResponseEntity.ok("User has been blocked successfully.");
     }
 
@@ -76,10 +77,11 @@ public class ModerationController {
     @PutMapping("/users/{id}/unblock")
     @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
     public ResponseEntity<String> unblockUser(
+            @PathVariable Long id,
             @RequestBody ChangeStatusRequest request
     ) {
         String reason = (request != null) ? request.getReason() : "";
-        userService.updateUserStatus(request.getId(), AccountStatus.ACTIVE, reason);
+        userService.updateUserStatus(id, AccountStatus.ACTIVE, reason);
         return ResponseEntity.ok("User has been unblocked successfully.");
     }
 
