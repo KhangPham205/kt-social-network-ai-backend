@@ -124,15 +124,15 @@ public class ModerationController {
         return ResponseEntity.ok(moderationService.getModerationLogs(filter, pageable));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/comment/{id}")
     public ResponseEntity<CommentResponse> getCommentById(
             @PathVariable Long id
     ) {
         return ResponseEntity.ok(commentService.getCommentById(id));
     }
 
-    @GetMapping("/{postId}")
-    public ResponseEntity<PostResponse> getPostById(@PathVariable Long postId) {
-        return ResponseEntity.ok(postService.getPostById(postId));
+    @GetMapping("/post/{id}")
+    public ResponseEntity<PostResponse> getPostById(@PathVariable Long id) {
+        return ResponseEntity.ok(postService.getPostById(id));
     }
 }
