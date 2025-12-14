@@ -28,6 +28,12 @@ public class ReportController {
         return ResponseEntity.ok(reportService.createReport(currentUserId, request));
     }
 
+    @GetMapping("/{reportId}")
+    @PreAuthorize("hasAuthority('REPORT:VIEW_ALL')")
+    public ResponseEntity<ReportResponse> getReportById(@PathVariable Long reportId) {
+        return ResponseEntity.ok(reportService.getReportById(reportId));
+    }
+
     // 2. Admin xem danh sách report (có filter)
     @GetMapping
     @PreAuthorize("hasAuthority('REPORT:VIEW_ALL')")

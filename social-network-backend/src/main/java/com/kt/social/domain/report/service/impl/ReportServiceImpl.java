@@ -112,6 +112,13 @@ public class ReportServiceImpl implements ReportService {
     }
 
     @Override
+    public ReportResponse getReportById(Long reportId) {
+        Report report = reportRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("Report not found"));
+        return reportMapper.toResponse(report);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public PageVO<ReportResponse> getReports(String filter, Pageable pageable) {
         Specification<Report> spec = Specification.where(null);

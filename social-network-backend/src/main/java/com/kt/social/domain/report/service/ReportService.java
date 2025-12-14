@@ -8,9 +8,11 @@ public interface ReportService {
     // Report
     ReportResponse createReport(Long reporterId, CreateReportRequest request);
     ReportResponse processReport(Long reportId, ProcessReportRequest request);
+    ReportResponse getReportById(Long reportId);
     PageVO<ReportResponse> getReports(String filter, Pageable pageable);
 
     // Complaint
     ComplaintResponse createComplaint(CreateComplaintRequest request);
     ComplaintResponse resolveComplaint(Long complaintId, ResolveComplaintRequest request);
+
 }
