@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Repository
@@ -33,4 +34,6 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
                         row -> ((Number) row[1]).intValue()
                 ));
     }
-}
+
+    @Query(value = "SELECT * FROM comments WHERE id = :id", nativeQuery = true)
+    Optional<Comment> findByIdIncludingDeleted(@Param("id") Long id);}

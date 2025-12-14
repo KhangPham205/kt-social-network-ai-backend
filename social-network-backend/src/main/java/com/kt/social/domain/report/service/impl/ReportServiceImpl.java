@@ -33,7 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -57,17 +59,39 @@ public class ReportServiceImpl implements ReportService {
                 .orElseThrow(() -> new ResourceNotFoundException("Reporter not found"));
 
         if (reportRepository.existsByReporterIdAndTargetTypeAndTargetId(reporterId, request.getTargetType(), request.getTargetId())) {
-            throw new BadRequestException("Bạn đã báo cáo nội dung này rồi.");
+            throw new BadRequestException("You have already reported this content.");
+        }
+
+        Long targetOwnerId = null;
+
+        if (request.getTargetType() == TargetType.POST) {
+            Post post = postRepository.findById(request.getTargetId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+            targetOwnerId = post.getAuthor().getId();
+
+        } else if (request.getTargetType() == TargetType.COMMENT) {
+            Comment comment = commentRepository.findById(request.getTargetId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+            targetOwnerId = comment.getAuthor().getId();
+
+        } else if (request.getTargetType() == TargetType.USER) {
+            // Nếu báo cáo chính user đó
+            targetOwnerId = request.getTargetId();
+        }
+        // else if (MESSAGE) ...
+
+        if (targetOwnerId == null) {
+            throw new BadRequestException("Không xác định được chủ sở hữu nội dung");
         }
 
         Report report = Report.builder()
                 .reporter(reporter)
                 .targetType(request.getTargetType())
                 .targetId(request.getTargetId())
+                .targetUserId(targetOwnerId) // 🔥 Lưu ID chủ sở hữu vào
                 .reason(request.getReason())
-                .customReason(request.getReason() == ReportReason.OTHER ? request.getCustomReason() : null)
                 .status(ReportStatus.PENDING)
-                .history(new ArrayList<>()) // Init list rỗng
+                .history(new ArrayList<>())
                 .build();
 
         return reportMapper.toResponse(reportRepository.save(report));
@@ -89,6 +113,10 @@ public class ReportServiceImpl implements ReportService {
                 .note(request.getNote())
                 .timestamp(Instant.now())
                 .build();
+
+        if (report.getHistory() == null) {
+            report.setHistory(new ArrayList<>());
+        }
 
         report.getHistory().add(history);
 
@@ -132,6 +160,37 @@ public class ReportServiceImpl implements ReportService {
                 .toList();
 
         return PageVO.<ReportResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<ComplaintResponse> getComplaints(String filter, Pageable pageable) {
+        Specification<Complaint> spec = Specification.where(null);
+
+        if (filter != null && !filter.isBlank()) {
+            Map<String, String> propertyPathMapper = new HashMap<>();
+            propertyPathMapper.put("reportId", "report.id");
+            propertyPathMapper.put("userId", "user.id");
+            propertyPathMapper.put("username", "user.username");
+            propertyPathMapper.put("email", "user.email");
+
+            spec = RSQLJPASupport.toSpecification(filter, propertyPathMapper);
+        }
+
+        Page<Complaint> page = complaintRepository.findAll(spec, pageable);
+
+        List<ComplaintResponse> content = page.getContent().stream()
+                .map(reportMapper::toResponse)
+                .toList();
+
+        return PageVO.<ComplaintResponse>builder()
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())

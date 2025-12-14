@@ -10,6 +10,7 @@ import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
 import com.kt.social.domain.comment.dto.CommentResponse;
 import com.kt.social.domain.comment.service.CommentService;
 import com.kt.social.domain.moderation.dto.ModerationLogResponse;
+import com.kt.social.domain.moderation.dto.UserModerationResponse;
 import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.moderation.service.ModerationService;
@@ -23,6 +24,7 @@ import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -62,6 +64,15 @@ public class ModerationController {
     ) {
         return ResponseEntity.ok(moderationService.getUserViolations(id, pageable));
     }
+
+    @GetMapping("/users")
+    public ResponseEntity<Page<UserModerationResponse>> getUsersWithReports(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        return ResponseEntity.ok(moderationService.getUsersWithReportCount(page, size));
+    }
+
     /**
      * Endpoint Khóa tài khoản
      * Truy cập: Admin, Moderator
@@ -74,7 +85,7 @@ public class ModerationController {
     ) {
         String reason = (request != null) ? request.getReason() : "";
         userService.updateUserStatus(id, AccountStatus.BLOCKED, reason);
-        return ResponseEntity.ok("User has been blocked successfully.");
+        return ResponseEntity.ok().build();
     }
 
     /**
@@ -89,7 +100,7 @@ public class ModerationController {
     ) {
         String reason = (request != null) ? request.getReason() : "";
         userService.updateUserStatus(id, AccountStatus.ACTIVE, reason);
-        return ResponseEntity.ok("User has been unblocked successfully.");
+        return ResponseEntity.ok().build();
     }
 
     /**

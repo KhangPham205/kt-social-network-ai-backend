@@ -9,6 +9,7 @@ import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
 import com.kt.social.domain.moderation.dto.ModerationLogResponse;
+import com.kt.social.domain.moderation.dto.UserModerationResponse;
 import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.post.model.Post;
@@ -25,15 +26,15 @@ import com.kt.social.domain.user.service.UserService;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.time.Instant;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -99,7 +100,27 @@ public class ModerationServiceImpl implements ModerationService {
                         .avatarUrl(null)
                         .build()); // Fallback nếu user đã bị xóa cứng
 
-        // 4. Map sang DTO
+        // 4. Xử lý Media (Trích xuất URL từ JSON)
+        Object mediaObj = messageData.get("media");
+        List<String> mediaUrls = new ArrayList<>();
+
+        if (mediaObj instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map) {
+                    // Trường hợp lưu dạng: [{"url": "http...", "type": "image"}]
+                    Map<?, ?> map = (Map<?, ?>) item;
+                    Object url = map.get("url");
+                    if (url != null) {
+                        mediaUrls.add(String.valueOf(url));
+                    }
+                } else if (item instanceof String) {
+                    // Trường hợp lưu dạng: ["http...", "http..."]
+                    mediaUrls.add((String) item);
+                }
+            }
+        }
+
+        // 5. Map sang DTO
         return ModerationMessageResponse.builder()
                 .id(messageId)
                 .conversationId(conversation.getId())
@@ -108,6 +129,7 @@ public class ModerationServiceImpl implements ModerationService {
                 .senderAvatar(sender.getAvatarUrl())
                 .content((String) messageData.get("content"))
                 .sentAt(String.valueOf(messageData.get("timestamp")))
+                .mediaUrls(mediaUrls)
                 .build();
     }
 
@@ -136,6 +158,19 @@ public class ModerationServiceImpl implements ModerationService {
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<UserModerationResponse> getUsersWithReportCount(int page, int size) {
+        // Sắp xếp mặc định: Người bị report nhiều nhất lên đầu
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "reportCount"));
+
+        // Lưu ý: Sort trong PageRequest với custom query 'new DTO...' đôi khi phức tạp.
+        // Nếu Sort trên bị lỗi, hãy đổi thành Sort.unsorted() và handle sort trong Query hoặc Frontend.
+        // Cách an toàn nhất là để sort tại Frontend hoặc Query cứng "ORDER BY COUNT(r) DESC".
+
+        return userRepository.findAllUsersWithReportCount(PageRequest.of(page, size));
     }
 
     @Override
@@ -170,29 +205,61 @@ public class ModerationServiceImpl implements ModerationService {
     }
 
     @Override
+    @Transactional
     public void restoreContent(Long id, TargetType targetType) {
         User admin = userService.getCurrentUser();
 
+        // 1. Khôi phục nội dung (Post/Comment)
         if (targetType == TargetType.POST) {
-            Post post = postRepository.findById(id) // Cần repo tìm cả bài đã xóa (Native Query hoặc tắt filter)
+            // Lưu ý: Cần dùng hàm find riêng để tìm được cả bài đã bị soft-delete
+            Post post = postRepository.findByIdIncludingDeleted(id)
                     .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
             post.setDeletedAt(null);
             post.setSystemBan(false);
+            post.setViolationDetails(null); // Xóa lý do vi phạm cũ (tuỳ chọn)
             postRepository.save(post);
+
         } else if (targetType == TargetType.COMMENT) {
-            Comment comment = commentRepository.findById(id)
+            Comment comment = commentRepository.findByIdIncludingDeleted(id)
                     .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
             comment.setDeletedAt(null);
+            // comment.setSystemBan(false); // Nếu comment có field này
             commentRepository.save(comment);
         }
 
-        // Ghi Log Admin restore
+        // Tìm tất cả các report ĐÃ DUYỆT (APPROVED) liên quan đến nội dung này
+        List<Report> relatedReports = reportRepository.findAllByTargetTypeAndTargetIdAndStatus(
+                targetType, id, ReportStatus.APPROVED
+        );
+
+        if (!relatedReports.isEmpty()) {
+            for (Report report : relatedReports) {
+                // Ghi lại lịch sử thay đổi của Report
+                report.getHistory().add(Report.ReportHistory.builder()
+                        .actorId(admin.getId())
+                        .actorName(admin.getDisplayName())
+                        .oldStatus(ReportStatus.APPROVED)
+                        .newStatus(ReportStatus.REJECTED)
+                        .note("System: Tự động từ chối do Admin đã khôi phục nội dung gốc.")
+                        .timestamp(Instant.now())
+                        .build());
+
+                // Đổi trạng thái thành REJECTED (Coi như báo cáo sai/không còn hiệu lực)
+                report.setStatus(ReportStatus.REJECTED);
+            }
+            reportRepository.saveAll(relatedReports);
+        }
+
+        // 3. Ghi Log Moderation (Admin Action)
         moderationLogRepository.save(ModerationLog.builder()
                 .targetType(targetType)
                 .targetId(id)
                 .action("ADMIN_RESTORE")
                 .actor(admin)
-                .reason("Admin restored content")
+                .reason("Admin restored content manually")
+                .createdAt(Instant.now())
                 .build());
     }
 

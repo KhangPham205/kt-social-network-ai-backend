@@ -10,6 +10,7 @@ public interface ReportService {
     ReportResponse processReport(Long reportId, ProcessReportRequest request);
     ReportResponse getReportById(Long reportId);
     PageVO<ReportResponse> getReports(String filter, Pageable pageable);
+    PageVO<ComplaintResponse> getComplaints(String filter, Pageable pageable);
 
     // Complaint
     ComplaintResponse createComplaint(CreateComplaintRequest request);

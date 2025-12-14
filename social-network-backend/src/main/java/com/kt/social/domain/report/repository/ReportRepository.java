@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecificationExecutor<Report> {
 
@@ -28,4 +30,6 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
             @Param("status") ReportStatus status,
             Pageable pageable
     );
+
+    List<Report> findAllByTargetTypeAndTargetIdAndStatus(TargetType targetType, Long id, ReportStatus reportStatus);
 }

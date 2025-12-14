@@ -3,6 +3,8 @@ package com.kt.social.domain.admin.dto;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 @Builder
 public class ModerationMessageResponse {
@@ -15,4 +17,6 @@ public class ModerationMessageResponse {
 
     private String content;
     private String sentAt; // Timestamp trong JSON thường là String
+
+    private List<String> mediaUrls;
 }
