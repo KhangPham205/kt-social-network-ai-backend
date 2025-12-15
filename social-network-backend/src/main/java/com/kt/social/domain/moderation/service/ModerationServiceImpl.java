@@ -200,8 +200,8 @@ public class ModerationServiceImpl implements ModerationService {
         // Mặc định tìm các bài đã bị xóa (deletedAt khác null) HOẶC bị ban (isSystemBan = true)
         // Nếu muốn filter động thì dùng Specification tương tự các hàm khác
         Specification<Post> spec = (root, query, cb) -> cb.or(
-                cb.isNotNull(root.get("deletedAt")),
-                cb.isTrue(root.get("isSystemBan"))
+                cb.isNotNull(root.get("deletedAt"))
+//                cb.isTrue(root.get("isSystemBan"))
         );
 
         // Nếu có filter text gửi lên (ví dụ lọc theo author name), bạn có thể kết hợp thêm RSQL tại đây
