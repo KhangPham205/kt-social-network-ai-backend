@@ -1,4 +1,4 @@
-package com.kt.social.domain.admin.dto;
+package com.kt.social.domain.moderation.dto;
 
 import com.kt.social.auth.enums.AccountStatus;
 import lombok.Builder;

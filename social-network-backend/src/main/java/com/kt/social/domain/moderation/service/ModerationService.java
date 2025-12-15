@@ -2,8 +2,8 @@ package com.kt.social.domain.moderation.service;
 
 import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.admin.dto.ModerationMessageResponse;
-import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.moderation.dto.ModerationMessageResponse;
+import com.kt.social.domain.moderation.dto.ModerationUserDetailResponse;
 import com.kt.social.domain.comment.dto.CommentResponse;
 import com.kt.social.domain.moderation.dto.ModerationLogResponse;
 import com.kt.social.domain.moderation.dto.UserModerationResponse;

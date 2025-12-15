@@ -3,12 +3,13 @@ package com.kt.social.domain.moderation.service;
 import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.auth.model.UserCredential;
 import com.kt.social.auth.repository.UserCredentialRepository;
+import com.kt.social.common.dto.IdCount;
 import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.admin.dto.ModerationMessageResponse;
-import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.moderation.dto.ModerationMessageResponse;
+import com.kt.social.domain.moderation.dto.ModerationUserDetailResponse;
 import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.comment.dto.CommentResponse;
 import com.kt.social.domain.comment.mapper.CommentMapper;
@@ -27,9 +28,9 @@ import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
-import com.kt.social.domain.report.enums.ReportStatus;
 import com.kt.social.domain.report.mapper.ReportMapper;
 import com.kt.social.domain.report.model.Report;
+import com.kt.social.domain.report.repository.ComplaintRepository;
 import com.kt.social.domain.report.repository.ReportRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
@@ -39,13 +40,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -58,6 +61,7 @@ public class ModerationServiceImpl implements ModerationService {
     private final MessageService messageService;
     private final ConversationRepository conversationRepository;
     private final ReportRepository reportRepository;
+    private final ComplaintRepository complaintRepository;
     private final ReportMapper reportMapper;
     private final ModerationLogRepository moderationLogRepository;
     private final PostRepository postRepository;
@@ -193,61 +197,68 @@ public class ModerationServiceImpl implements ModerationService {
         return userRepository.findAllUsersWithReportCount(keyword, newPageable);
     }
 
-    // --- Lấy danh sách POST vi phạm ---
     @Override
     @Transactional(readOnly = true)
     public PageVO<PostResponse> getFlaggedPosts(String filter, Pageable pageable) {
-        // Mặc định tìm các bài đã bị xóa (deletedAt khác null) HOẶC bị ban (isSystemBan = true)
-        // Nếu muốn filter động thì dùng Specification tương tự các hàm khác
+        // Query bài viết vi phạm
         Specification<Post> spec = (root, query, cb) -> cb.or(
                 cb.isNotNull(root.get("deletedAt"))
 //                cb.isTrue(root.get("isSystemBan"))
         );
-
-        // Nếu có filter text gửi lên (ví dụ lọc theo author name), bạn có thể kết hợp thêm RSQL tại đây
-
         Page<Post> page = postRepository.findAll(spec, pageable);
+
+        // Convert sang DTO
         List<PostResponse> content = page.getContent().stream()
-                .map(postMapper::toDto) // Sử dụng PostMapper có sẵn
+                .map(postMapper::toDto)
                 .toList();
+
+        // 🔥 GỌI HÀM BỔ SUNG COUNT
+        enrichWithCounts(content, PostResponse::getId, PostResponse::setReportCount, PostResponse::setComplaintCount, TargetType.POST);
 
         return buildPageVO(page, content);
     }
 
-    // --- Lấy danh sách COMMENT vi phạm ---
+    // --- 2. COMMENT ---
     @Override
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getFlaggedComments(String filter, Pageable pageable) {
         Specification<Comment> spec = (root, query, cb) -> cb.isNotNull(root.get("deletedAt"));
-
         Page<Comment> page = commentRepository.findAll(spec, pageable);
+
         List<CommentResponse> content = page.getContent().stream()
                 .map(commentMapper::toDto)
                 .toList();
 
+        // 🔥 GỌI HÀM BỔ SUNG COUNT
+        enrichWithCounts(content, CommentResponse::getId, CommentResponse::setReportCount, CommentResponse::setComplaintCount, TargetType.COMMENT);
+
         return buildPageVO(page, content);
     }
 
-    // --- Lấy danh sách MESSAGE vi phạm (Đã bị xóa mềm) ---
+    // --- 3. MESSAGE ---
     @Override
     @Transactional(readOnly = true)
     public PageVO<ModerationMessageResponse> getFlaggedMessages(String filter, Pageable pageable) {
-        // Gọi Repository custom để query JSONB tìm message có isDeleted = true
-        Page<ModerationMessageResponse> page = conversationRepository.findDeletedMessages(pageable);
+        // Giả sử repository trả về DTO luôn (như đã bàn ở câu trước)
+        Page<ModerationMessageResponse> page = conversationRepository.findDeletedMessages(pageable); // Hoặc map từ Projection
 
-        return buildPageVO(page, page.getContent());
-    }
+        List<ModerationMessageResponse> content = page.getContent();
 
-    // Helper method để build PageVO cho gọn
-    private <T> PageVO<T> buildPageVO(Page<?> page, List<T> content) {
-        return PageVO.<T>builder()
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .numberOfElements(content.size())
-                .content(content)
-                .build();
+        // GỌI HÀM BỔ SUNG COUNT
+        // Lưu ý: Message ID thường là String (UUID). Nếu Report lưu targetId là Long thì sẽ lỗi ở đây.
+        // Giả sử bạn đã parse Message ID sang Long hoặc Report hỗ trợ String.
+        // Nếu Message ID là String UUID: Bạn cần sửa hàm countByTargetTypeAndTargetIdIn nhận List<String>
+        try {
+            enrichWithCounts(content,
+                    msg -> Long.valueOf(msg.getId()), // Parse ID tin nhắn sang Long
+                    ModerationMessageResponse::setReportCount,
+                    ModerationMessageResponse::setComplaintCount,
+                    TargetType.MESSAGE);
+        } catch (NumberFormatException e) {
+            // Log warning: Message ID không phải số, không thể fetch report theo ID số
+        }
+
+        return buildPageVO(page, content);
     }
 
     @Override
@@ -469,6 +480,39 @@ public class ModerationServiceImpl implements ModerationService {
                 .actorId(log.getActor() != null ? log.getActor().getId() : null)
                 .actorName(log.getActor() != null ? log.getActor().getDisplayName() : "System (AI)")
                 .actorAvatar(log.getActor() != null ? log.getActor().getAvatarUrl() : null)
+                .build();
+    }
+
+    private <T> void enrichWithCounts(List<T> responses, Function<T, Long> idExtractor, BiConsumer<T, Long> setReport, BiConsumer<T, Long> setComplaint, TargetType type) {
+        if (responses.isEmpty()) return;
+
+        // 1. Lấy danh sách ID
+        List<Long> ids = responses.stream().map(idExtractor).toList();
+
+        // 2. Query Database (Chỉ tốn 2 query cho cả trang dữ liệu)
+        Map<Long, Long> reportCounts = reportRepository.countByTargetTypeAndTargetIdIn(type, ids)
+                .stream().collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+
+        Map<Long, Long> complaintCounts = complaintRepository.countByTargetTypeAndTargetIdIn(type, ids)
+                .stream().collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+
+        // 3. Gán dữ liệu vào DTO
+        for (T res : responses) {
+            Long id = idExtractor.apply(res);
+            setReport.accept(res, reportCounts.getOrDefault(id, 0L));
+            setComplaint.accept(res, complaintCounts.getOrDefault(id, 0L));
+        }
+    }
+
+    // Helper build page
+    private <T> PageVO<T> buildPageVO(Page<?> page, List<T> content) {
+        return PageVO.<T>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
                 .build();
     }
 }

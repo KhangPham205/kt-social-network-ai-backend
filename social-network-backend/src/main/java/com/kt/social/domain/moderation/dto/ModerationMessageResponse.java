@@ -1,8 +1,9 @@
-package com.kt.social.domain.admin.dto;
+package com.kt.social.domain.moderation.dto;
 
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.Instant;
 import java.util.List;
 
 @Data
@@ -19,4 +20,9 @@ public class ModerationMessageResponse {
     private String sentAt; // Timestamp trong JSON thường là String
 
     private List<String> mediaUrls;
+
+    private Instant deletedAt;
+
+    private long reportCount;
+    private long complaintCount;
 }

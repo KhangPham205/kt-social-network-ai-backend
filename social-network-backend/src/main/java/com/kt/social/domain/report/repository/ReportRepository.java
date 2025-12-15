@@ -1,5 +1,6 @@
 package com.kt.social.domain.report.repository;
 
+import com.kt.social.common.dto.IdCount;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.enums.ReportStatus;
 import com.kt.social.domain.report.model.Report;
@@ -34,4 +35,10 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
     Page<Report> findByTargetUserId(Long userId, Pageable pageable);
 
     Page<Report> findByTargetTypeAndTargetId(TargetType targetType, Long targetId, Pageable pageable);
+
+    @Query("SELECT r.targetId as id, COUNT(r) as count " +
+            "FROM Report r " +
+            "WHERE r.targetType = :type AND r.targetId IN :ids " +
+            "GROUP BY r.targetId")
+    List<IdCount> countByTargetTypeAndTargetIdIn(@Param("type") TargetType type, @Param("ids") List<Long> ids);
 }

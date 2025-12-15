@@ -2,21 +2,16 @@ package com.kt.social.domain.moderation.controller;
 
 import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.common.constants.ApiConstants;
-import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.admin.dto.ChangeStatusRequest;
-import com.kt.social.domain.admin.dto.ModerationMessageResponse;
-import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.moderation.dto.ModerationMessageResponse;
+import com.kt.social.domain.moderation.dto.ModerationUserDetailResponse;
 import com.kt.social.domain.comment.dto.CommentResponse;
 import com.kt.social.domain.comment.service.CommentService;
 import com.kt.social.domain.moderation.dto.ModerationLogResponse;
 import com.kt.social.domain.moderation.dto.UserModerationResponse;
-import com.kt.social.domain.moderation.model.ModerationLog;
-import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.moderation.service.ModerationService;
 import com.kt.social.domain.post.dto.PostResponse;
-import com.kt.social.domain.post.model.Post;
-import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.post.service.PostService;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ComplaintResponse;
@@ -41,8 +36,6 @@ public class ModerationController {
     private final ReportService reportService;
     private final PostService postService;
     private final ModerationService moderationService;
-    private final PostRepository postRepository;
-    private final ModerationLogRepository moderationLogRepository;
 
     @GetMapping("/users/{id}")
     @PreAuthorize("hasAnyAuthority('USER:READ_SENSITIVE', 'MODERATION:ACCESS')")

@@ -32,6 +32,9 @@ public class PostResponse {
 
     private ReactSummaryDto reactSummary;
 
+    private long reportCount;
+    private long complaintCount;
+
     private boolean isSystemBan;
 
     private Instant createdAt;

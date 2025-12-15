@@ -24,5 +24,5 @@ public class MessageResponse {
     private Instant createdAt;
     private Boolean isRead;
     private List<Map<String,Object>> reactions; // list of reaction objects
-    private boolean isDeleted;
+    private Instant deletedAt;
 }

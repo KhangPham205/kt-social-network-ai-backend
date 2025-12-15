@@ -191,8 +191,14 @@ public class MessageServiceImpl implements MessageService {
         r.setCreatedAt(m.get("createdAt") == null ? null : Instant.parse((String)m.get("createdAt")));
         r.setIsRead(Boolean.TRUE.equals(m.get("isRead")));
         r.setReactions((List<Map<String,Object>>) m.getOrDefault("reactions", List.of()));
-        boolean isDeleted = Boolean.TRUE.equals(m.get("isDeleted"));
-        r.setDeleted(isDeleted);
+
+        Object deletedAtObj = m.get("deletedAt");
+        if (deletedAtObj != null) {
+            r.setDeletedAt(Instant.parse(String.valueOf(deletedAtObj)));
+        } else {
+            r.setDeletedAt(null);
+        }
+
         return r;
     }
 
@@ -227,7 +233,7 @@ public class MessageServiceImpl implements MessageService {
             // Bước 3: Duyệt list để tìm và update
             for (Map<String, Object> msg : messages) {
                 if (Objects.equals(String.valueOf(msg.get("id")), messageId)) {
-                    msg.put("isDeleted", true); // Đánh dấu xóa
+                    msg.put("deletedAt", Instant.now().toString()); // Đánh dấu xóa
                     found = true;
                     break;
                 }

@@ -29,8 +29,13 @@ public class CommentResponse {
     private Integer reactCount;
     private Integer childrenCount;
 
+    private long reportCount;
+    private long complaintCount;
+
     private Instant createdAt;
     private Instant updatedAt;
 
     private Integer depth;
+
+    private Instant deletedAt;
 }
