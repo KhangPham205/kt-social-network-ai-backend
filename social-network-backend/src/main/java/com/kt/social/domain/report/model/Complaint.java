@@ -1,7 +1,7 @@
 package com.kt.social.domain.report.model;
 
 import com.kt.social.common.entity.BaseEntity;
-import com.kt.social.domain.report.enums.ComplaintStatus;
+import com.kt.social.domain.react.enums.TargetType; // Nhớ import Enum này
 import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -17,17 +17,19 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 public class Complaint extends BaseEntity {
 
-    // Khiếu nại dựa trên Report nào (User thấy bài bị xóa do Report #123 -> Tạo khiếu nại cho #123)
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "report_id", nullable = false)
-    private Report report;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TargetType targetType; // POST, COMMENT
+
+    @Column(nullable = false)
+    private Long targetId; // ID của Post hoặc Comment
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false) // Người đi khiếu nại (thường là chủ bài viết)
-    private User user;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user; // Người tạo khiếu nại
 
     @Column(columnDefinition = "TEXT")
-    private String content; // Lý do khiếu nại: "Tôi không vi phạm vì..."
+    private String content; // Lý do: "Bài tôi không vi phạm..."
 
     @Column(columnDefinition = "TEXT")
     private String adminResponse;

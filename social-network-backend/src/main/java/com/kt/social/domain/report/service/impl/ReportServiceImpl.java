@@ -169,19 +169,47 @@ public class ReportServiceImpl implements ReportService {
     @Transactional
     public ComplaintResponse createComplaint(CreateComplaintRequest request) {
         User currentUser = userService.getCurrentUser();
-        Report report = reportRepository.findById(request.getReportId())
-                .orElseThrow(() -> new ResourceNotFoundException("Report not found"));
 
-        if (complaintRepository.existsByReport(report)) {
-            throw new BadRequestException("Đã tồn tại khiếu nại cho báo cáo này.");
+        // 1. Kiểm tra trùng lặp (Một nội dung chỉ được khiếu nại 1 lần đang chờ xử lý)
+        if (complaintRepository.existsByTargetTypeAndTargetId(request.getTargetType(), request.getTargetId())) {
+            throw new BadRequestException("Nội dung này đang có khiếu nại chờ xử lý hoặc đã được giải quyết.");
         }
 
+        // 2. Validate và Kiểm tra quyền sở hữu (User chỉ được khiếu nại bài của chính mình)
+        validateContentOwnership(currentUser.getId(), request.getTargetType(), request.getTargetId());
+
+        // 3. Tạo Complaint
         Complaint complaint = Complaint.builder()
-                .report(report)
                 .user(currentUser)
+                .targetType(request.getTargetType())
+                .targetId(request.getTargetId())
                 .content(request.getReason())
                 .build();
 
         return reportMapper.toResponse(complaintRepository.save(complaint));
+    }
+
+    // Hàm phụ trợ để kiểm tra nội dung có tồn tại và thuộc về user không
+    private void validateContentOwnership(Long userId, TargetType type, Long targetId) {
+        if (type == TargetType.POST) {
+            // Dùng hàm tìm cả bài đã xóa (vì bài bị xóa mới đi khiếu nại)
+            Post post = postRepository.findByIdIncludingDeleted(targetId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Bài viết không tồn tại."));
+
+            if (!post.getAuthor().getId().equals(userId)) {
+                throw new BadRequestException("Bạn chỉ có thể khiếu nại cho bài viết của chính mình.");
+            }
+
+        } else if (type == TargetType.COMMENT) {
+            Comment comment = commentRepository.findByIdIncludingDeleted(targetId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Bình luận không tồn tại."));
+
+            if (!comment.getAuthor().getId().equals(userId)) {
+                throw new BadRequestException("Bạn chỉ có thể khiếu nại cho bình luận của chính mình.");
+            }
+        } else {
+            // Handle Message or User types if needed
+            throw new BadRequestException("Loại nội dung không hỗ trợ khiếu nại.");
+        }
     }
 }
