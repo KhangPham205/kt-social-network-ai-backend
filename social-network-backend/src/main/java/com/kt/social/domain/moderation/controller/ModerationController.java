@@ -188,7 +188,7 @@ public class ModerationController {
      * Endpoint khôi phục nội dung đã bị xóa (Post, Comment)
      * Truy cập: Admin, Moderator
      */
-    @PutMapping("/{type}/{id}/restore")
+    @PutMapping("/{type}/{id}/unblock")
     @PreAuthorize("hasAnyAuthority('POST:DELETE_ANY', 'MODERATION:ACCESS')")
     public ResponseEntity<Map<String, String>> unblockContent(
             @PathVariable TargetType type,
