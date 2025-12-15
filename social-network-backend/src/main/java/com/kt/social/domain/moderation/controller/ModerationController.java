@@ -19,9 +19,9 @@ import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.post.service.PostService;
 import com.kt.social.domain.react.enums.TargetType;
+import com.kt.social.domain.report.dto.ComplaintResponse;
 import com.kt.social.domain.report.dto.ReportResponse;
-import com.kt.social.domain.user.model.User;
-import com.kt.social.domain.user.service.UserService;
+import com.kt.social.domain.report.service.ReportService;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
@@ -37,8 +37,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ModerationController {
 
-    private final UserService userService;
     private final CommentService commentService;
+    private final ReportService reportService;
     private final PostService postService;
     private final ModerationService moderationService;
     private final PostRepository postRepository;
@@ -123,6 +123,36 @@ public class ModerationController {
             @ParameterObject Pageable pageable
     ) {
         return ResponseEntity.ok(moderationService.getFlaggedMessages(filter, pageable));
+    }
+
+    /**
+     * Lấy danh sách Report của một nội dung cụ thể (Post/Comment)
+     * URL: GET /api/v1/moderation/{type}/{id}/reports
+     */
+    @GetMapping("/{type}/{id}/reports")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
+    public ResponseEntity<PageVO<ReportResponse>> getContentReports(
+            @PathVariable TargetType type,
+            @PathVariable Long id,
+            @ParameterObject Pageable pageable
+    ) {
+        // Gọi service lấy danh sách report theo content
+        return ResponseEntity.ok(reportService.getReportsByContent(id, type, pageable));
+    }
+
+    /**
+     * Lấy danh sách Complaint của một nội dung cụ thể (Post/Comment)
+     * URL: GET /api/v1/moderation/{type}/{id}/complaints
+     */
+    @GetMapping("/{type}/{id}/complaints")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
+    public ResponseEntity<PageVO<ComplaintResponse>> getContentComplaints(
+            @PathVariable TargetType type,
+            @PathVariable Long id,
+            @ParameterObject Pageable pageable
+    ) {
+        // Gọi service lấy danh sách complaint theo content
+        return ResponseEntity.ok(reportService.getComplaintsByContent(id, type, pageable));
     }
 
     @GetMapping("/comment/{id}")

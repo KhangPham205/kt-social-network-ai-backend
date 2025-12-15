@@ -166,6 +166,44 @@ public class ReportServiceImpl implements ReportService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public PageVO<ReportResponse> getReportsByContent(Long targetId, TargetType targetType, Pageable pageable) {
+        Page<Report> page = reportRepository.findByTargetTypeAndTargetId(targetType, targetId, pageable);
+
+        List<ReportResponse> content = page.getContent().stream()
+                .map(reportMapper::toResponse)
+                .toList();
+
+        return PageVO.<ReportResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<ComplaintResponse> getComplaintsByContent(Long targetId, TargetType targetType, Pageable pageable) {
+        Page<Complaint> page = complaintRepository.findByTargetTypeAndTargetId(targetType, targetId, pageable);
+
+        List<ComplaintResponse> content = page.getContent().stream()
+                .map(reportMapper::toResponse)
+                .toList();
+
+        return PageVO.<ComplaintResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    @Override
     @Transactional
     public ComplaintResponse createComplaint(CreateComplaintRequest request) {
         User currentUser = userService.getCurrentUser();

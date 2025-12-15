@@ -32,4 +32,6 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
     long countByTargetUserId(Long userId);
 
     Page<Report> findByTargetUserId(Long userId, Pageable pageable);
+
+    Page<Report> findByTargetTypeAndTargetId(TargetType targetType, Long targetId, Pageable pageable);
 }
