@@ -106,8 +106,7 @@ public class ModerationController {
         return ResponseEntity.ok(moderationService.getFlaggedComments(filter, pageable));
     }
 
-    /**
-     * Lấy danh sách MESSAGE vi phạm (đã bị xóa mềm)
+    /**     * Lấy danh sách MESSAGE vi phạm (đã bị xóa mềm)
      */
     @GetMapping("/messages/flagged")
     @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
@@ -168,13 +167,16 @@ public class ModerationController {
      */
     @PutMapping("/users/{id}/block")
     @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
-    public ResponseEntity<String> blockUser(
+    public ResponseEntity<Map<String, String>> blockUser(
             @PathVariable Long id,
             @RequestBody ChangeStatusRequest request
     ) {
         String reason = (request != null) ? request.getReason() : "";
         moderationService.updateUserStatus(id, AccountStatus.BLOCKED, reason);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(Map.of(
+                "message", "User blocked successfully",
+                "statusCode", "200"
+        ));
     }
 
     /**
@@ -183,13 +185,16 @@ public class ModerationController {
      */
     @PutMapping("/users/{id}/unblock")
     @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
-    public ResponseEntity<String> unblockUser(
+    public ResponseEntity<Map<String, String>> unblockUser(
             @PathVariable Long id,
             @RequestBody ChangeStatusRequest request
     ) {
         String reason = (request != null) ? request.getReason() : "";
         moderationService.updateUserStatus(id, AccountStatus.ACTIVE, reason);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(Map.of(
+                "message", "User unblocked successfully",
+                "statusCode", "200"
+        ));
     }
 
 
@@ -204,7 +209,10 @@ public class ModerationController {
             @PathVariable Long id
     ) {
         moderationService.blockContent(id, type);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(Map.of(
+                "message", "Content blocked successfully",
+                "statusCode", "200"
+        ));
     }
 
     /**
@@ -218,6 +226,9 @@ public class ModerationController {
             @PathVariable Long id
     ) {
         moderationService.unblockContent(id, type);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(Map.of(
+                "message", "Content unblocked successfully",
+                "statusCode", "200"
+        ));
     }
 }
