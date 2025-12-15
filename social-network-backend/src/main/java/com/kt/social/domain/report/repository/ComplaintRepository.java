@@ -9,8 +9,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ComplaintRepository extends JpaRepository<Complaint, Long>, JpaSpecificationExecutor<Complaint> {
-    boolean existsByReport(Report report);
-
     // Kiểm tra xem đã có khiếu nại nào cho nội dung này chưa (tránh spam)
     boolean existsByTargetTypeAndTargetId(TargetType targetType, Long targetId);
 }
