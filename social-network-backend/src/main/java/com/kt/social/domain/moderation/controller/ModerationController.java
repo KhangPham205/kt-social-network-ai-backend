@@ -60,7 +60,7 @@ public class ModerationController {
 
     @GetMapping("/users")
     @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
-    public ResponseEntity<Page<UserModerationResponse>> getUsersWithReports(
+    public ResponseEntity<PageVO<UserModerationResponse>> getUsersWithReports(
             @RequestParam(required = false) String filter,
             @ParameterObject Pageable pageable) {
 

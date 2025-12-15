@@ -79,7 +79,7 @@ public class ReportServiceImpl implements ReportService {
                 .targetId(request.getTargetId())
                 .targetUserId(targetOwnerId)
                 .reason(request.getReason())
-                .customReason(request.getReason().name().equals("OTHER") ? "Người dùng báo cáo khác" : null) // Logic nhỏ nếu cần
+                .customReason(request.getReason().name().equals("OTHER") ? request.getCustomReason() : null) // Nếu reason là OTHER
                 .build();
 
         return reportMapper.toResponse(reportRepository.save(report));

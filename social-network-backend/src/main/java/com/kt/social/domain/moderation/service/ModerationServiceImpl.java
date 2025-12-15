@@ -175,26 +175,28 @@ public class ModerationServiceImpl implements ModerationService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<UserModerationResponse> getUsersWithReportCount(Pageable pageable, String filter) {
-        // 1. Xử lý Filter (Giả sử filter gửi lên dạng "username=='tung'")
-        // Vì query aggregate phức tạp, ta chỉ tách lấy value để search keyword đơn giản
+    public PageVO<UserModerationResponse> getUsersWithReportCount(Pageable pageable, String filter) {
         String keyword = null;
         if (filter != null && !filter.isBlank()) {
-            // Logic bóc tách đơn giản: Nếu filter chứa "=='", cắt lấy phần sau
-            // Ví dụ: "username=='admin'" -> keyword = "admin"
-            // Bạn có thể dùng thư viện RSQL parser để lấy chuẩn hơn nếu muốn
             if (filter.contains("=='")) {
                 keyword = filter.split("=='")[1].replace("'", "").trim();
             } else {
-                keyword = filter; // Search all
+                keyword = filter;
             }
         }
 
-        // 2. Tạo PageRequest mới nhưng BỎ qua Sort từ client gửi lên
-        // (Vì ta đã sort cứng trong Query rồi, tránh lỗi "Property reportCount not found")
         Pageable newPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
 
-        return userRepository.findAllUsersWithReportCount(keyword, newPageable);
+        Page<UserModerationResponse> page = userRepository.findAllUsersWithReportCount(keyword, newPageable);
+
+        return PageVO.<UserModerationResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(page.getNumberOfElements())
+                .content(page.getContent())
+                .build();
     }
 
     @Override
@@ -212,7 +214,6 @@ public class ModerationServiceImpl implements ModerationService {
                 .map(postMapper::toDto)
                 .toList();
 
-        // 🔥 GỌI HÀM BỔ SUNG COUNT
         enrichWithCounts(content, PostResponse::getId, PostResponse::setReportCount, PostResponse::setComplaintCount, TargetType.POST);
 
         return buildPageVO(page, content);

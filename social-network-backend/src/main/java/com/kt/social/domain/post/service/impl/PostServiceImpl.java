@@ -263,45 +263,79 @@ public class PostServiceImpl implements PostService {
     public PageVO<PostResponse> getFeed(Pageable pageable, String filter) {
         User current = userService.getCurrentUser();
 
+        // 1. Lấy danh sách bạn bè (bao gồm bản thân)
         var friends = friendshipRepository.findAllAcceptedFriends(current);
-        var friendAndSelfIds = Stream.concat(
-                        friends.stream(),
-                        Stream.of(current) // Thêm chính mình vào
-                )
+        List<Long> friendAndSelfIds = Stream.concat(friends.stream(), Stream.of(current))
                 .map(User::getId)
                 .distinct()
                 .toList();
 
+        // 2. Lấy danh sách đang theo dõi
         var followings = userRelaRepository.findByFollower(current)
                 .stream()
                 .map(UserRela::getFollowing)
                 .toList();
 
-        var authorIds = Stream.concat(
+        // 3. Tổng hợp danh sách tác giả được phép xem (Bạn bè + Bản thân + Đang theo dõi)
+        List<Long> authorIds = Stream.concat(
                         friendAndSelfIds.stream(),
                         followings.stream().map(User::getId)
                 )
                 .distinct()
                 .toList();
 
+        // Safety check: Nếu list rỗng (hiếm khi xảy ra vì luôn có current user), return rỗng luôn
+//        if (authorIds.isEmpty()) {
+//            return PageVO.builder()
+//                    .content(List.of(PostResponse ))
+//                    .page(pageable.getPageNumber())
+//                    .size(pageable.getPageSize())
+//                    .totalElements(0L)
+//                    .totalPages(0)
+//                    .numberOfElements(0)
+//                    .build();
+//        }
+
+        // 4. Build Specification
         Specification<Post> baseSpec = (root, query, cb) -> {
-            query.distinct(true);
+            // query.distinct(true); // Thường không cần thiết nếu logic IN chuẩn, bỏ đi cho nhẹ query
+
+            // Điều kiện 1: Tác giả phải nằm trong danh sách quan hệ
             Predicate authorPredicate = root.get("author").get("id").in(authorIds);
+
+            // Điều kiện 2: PUBLIC - Ai trong list authorIds đăng public thì mình đều thấy
             Predicate publicPosts = cb.equal(root.get("accessModifier"), AccessScope.PUBLIC);
+
+            // Điều kiện 3: FRIENDS - Chỉ thấy nếu tác giả là Bạn bè hoặc chính mình
             Predicate friendPosts = cb.and(
                     cb.equal(root.get("accessModifier"), AccessScope.FRIENDS),
                     root.get("author").get("id").in(friendAndSelfIds)
             );
+
+            // Điều kiện 4: PRIVATE - Chỉ thấy của chính mình
             Predicate privatePosts = cb.and(
                     cb.equal(root.get("accessModifier"), AccessScope.PRIVATE),
-                    cb.equal(root.get("author"), current)
+                    cb.equal(root.get("author").get("id"), current.getId()) // So sánh ID an toàn hơn object
             );
+
+            // Điều kiện 5: Chưa bị xóa (SỬA LỖI TẠI ĐÂY)
+            Predicate unviolentPosts = cb.isNull(root.get("deletedAt")); // ✅ Dùng isNull thay vì equal(null)
+
+            // Tổng hợp Access Logic: (Public OR (Friend & là bạn) OR (Private & là mình))
             Predicate accessPredicate = cb.or(publicPosts, friendPosts, privatePosts);
-            return cb.and(authorPredicate, accessPredicate);
+
+            return cb.and(authorPredicate, accessPredicate, unviolentPosts);
         };
+
+        // 5. Kết hợp với Filter từ Client (nếu có)
         Specification<Post> finalSpec = baseSpec;
         if (filter != null && !filter.isBlank()) {
-            finalSpec = finalSpec.and(RSQLJPASupport.toSpecification(filter));
+            try {
+                finalSpec = finalSpec.and(RSQLJPASupport.toSpecification(filter));
+            } catch (Exception e) {
+                // Log warning nếu filter sai cú pháp, tránh crash API
+                // log.warn("Invalid filter: {}", filter);
+            }
         }
 
         Page<Post> page = postRepository.findAll(finalSpec, pageable);

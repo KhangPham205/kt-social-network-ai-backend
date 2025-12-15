@@ -18,7 +18,7 @@ public interface ModerationService {
     ModerationUserDetailResponse getUserDetailForAdmin(Long userId);
     PageVO<ReportResponse> getUserViolations(Long userId, Pageable pageable);
     ModerationMessageResponse getMessageDetailForAdmin(String messageId);
-    Page<UserModerationResponse> getUsersWithReportCount(Pageable pageable, String filter);
+    PageVO<UserModerationResponse> getUsersWithReportCount(Pageable pageable, String filter);
     PageVO<PostResponse> getFlaggedPosts(String filter, Pageable pageable);
     PageVO<CommentResponse> getFlaggedComments(String filter, Pageable pageable);
     PageVO<ModerationMessageResponse> getFlaggedMessages(String filter, Pageable pageable);

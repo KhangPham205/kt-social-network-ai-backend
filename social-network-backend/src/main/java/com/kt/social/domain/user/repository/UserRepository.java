@@ -27,7 +27,7 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             "u.displayName, " +
             "u.avatarUrl, " +
             "c.status, " +
-            "COUNT(r) as reportCount) " + // Đặt alias là reportCount
+            "COUNT(r)) " +
             "FROM User u " +
             "JOIN u.credential c " +
             "LEFT JOIN Report r ON u.id = r.targetUserId " +
@@ -36,7 +36,8 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             "LOWER(c.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(u.displayName) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
             "GROUP BY u.id, c.username, c.email, u.displayName, u.avatarUrl, c.status " +
-            "ORDER BY reportCount DESC") // 🔥 Sắp xếp cứng tại đây để tránh lỗi
+            "HAVING COUNT(r) > 0 " +
+            "ORDER BY COUNT(r) DESC")
     Page<UserModerationResponse> findAllUsersWithReportCount(
             @Param("keyword") String keyword,
             Pageable pageable

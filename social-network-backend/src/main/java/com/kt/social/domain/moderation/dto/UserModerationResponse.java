@@ -13,17 +13,22 @@ public class UserModerationResponse {
     private String displayName;
     private String avatar;
     private boolean isLocked;
-    private Long reportCount;
+    private long reportCount;
 
-    // Constructor khớp với câu Query JPQL
-    public UserModerationResponse(Long userId, String username, String email, String displayName, String avatar, AccountStatus status, Long reportCount) {
+    // Constructor khớp với thứ tự trong @Query
+    public UserModerationResponse(Long userId,
+                                  String username,
+                                  String email,
+                                  String displayName,
+                                  String avatar,
+                                  AccountStatus status,
+                                  Long reportCount) { // JPA trả về Long (Wrapper), Hibernate tự unbox
         this.userId = userId;
         this.username = username;
         this.email = email;
         this.displayName = displayName;
         this.avatar = avatar;
-        // Logic xác định user có bị khóa hay không dựa trên Enum AccountStatus
         this.isLocked = (status == AccountStatus.BLOCKED);
-        this.reportCount = reportCount;
+        this.reportCount = reportCount != null ? reportCount : 0L;
     }
 }
