@@ -18,9 +18,7 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
 
     boolean existsByReporterIdAndTargetTypeAndTargetId(Long reporterId, TargetType targetType, Long targetId);
 
-    long countByTargetTypeAndTargetIdAndStatus(TargetType targetType, Long targetId, ReportStatus status);
-
-    @Query("SELECT r FROM Report r WHERE r.status = :status AND (" +
+    @Query("SELECT r FROM Report r WHERE (" +
             "(r.targetType = 'USER' AND r.targetId = :userId) OR " +
             "(r.targetType = 'POST' AND r.targetId IN (SELECT p.id FROM Post p WHERE p.author.id = :userId)) OR " +
             "(r.targetType = 'COMMENT' AND r.targetId IN (SELECT c.id FROM Comment c WHERE c.author.id = :userId))" +
@@ -31,5 +29,7 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
             Pageable pageable
     );
 
-    List<Report> findAllByTargetTypeAndTargetIdAndStatus(TargetType targetType, Long id, ReportStatus reportStatus);
+    long countByTargetUserId(Long userId);
+
+    Page<Report> findByTargetUserId(Long userId, Pageable pageable);
 }

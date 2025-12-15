@@ -246,48 +246,6 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
     }
 
     @Override
-    @Transactional
-    public void updateUserStatus(Long targetUserId, AccountStatus newStatus, String reason) {
-        User currentUser = getCurrentUser();
-
-        // 1. Kiểm tra User tồn tại
-        User targetUser = userRepository.findById(targetUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        // 2. Validate: Không được tự khóa chính mình
-        if (currentUser.getId().equals(targetUserId)) {
-            throw new BadRequestException("Bạn không thể tự khóa/mở khóa tài khoản của chính mình.");
-        }
-
-        // 3. Validate: Moderator không được khóa Admin (Logic phân quyền cơ bản)
-        boolean isActorAdmin = currentUser.getCredential().getRoles().stream()
-                .anyMatch(r -> r.getName().equals("ADMIN"));
-        boolean isTargetAdmin = targetUser.getCredential().getRoles().stream()
-                .anyMatch(r -> r.getName().equals("ADMIN"));
-
-        if (isTargetAdmin && !isActorAdmin) {
-            throw new AccessDeniedException("Moderator không có quyền khóa tài khoản Admin.");
-        }
-
-        // 4. Cập nhật trạng thái trong UserCredential
-        UserCredential credential = targetUser.getCredential();
-        credential.setStatus(newStatus);
-
-        userCredentialRepository.save(credential);
-        // userRepository.save(targetUser); // Nếu có thay đổi ở bảng User
-
-        // 5. Ghi Log hành động
-        activityLogService.logActivity(
-                currentUser,
-                newStatus == AccountStatus.BLOCKED ? "USER:BLOCK_ACCOUNT" : "USER:UNBLOCK_ACCOUNT",
-                "User",
-                targetUserId,
-                Map.of("reason", reason != null ? reason : "No reason provided",
-                        "newStatus", newStatus.toString())
-        );
-    }
-
-    @Override
     @Transactional(readOnly = true)
     public PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable) {
 
@@ -375,32 +333,6 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
         );
 
         return userMapper.toAdminViewDto(savedUser);
-    }
-
-    /**
-     * CRU(D): Xóa/Cấm user (Admin)
-     */
-    @Override
-    @Transactional
-    public void deleteUserAsAdmin(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        UserCredential credential = user.getCredential();
-
-        // Đây là "Soft Delete" (Xóa mềm)
-        credential.setStatus(AccountStatus.BLOCKED);
-
-        userRepository.save(user);
-        userCredentialRepository.save(credential);
-
-        // Ghi Log
-        activityLogService.logActivity(
-                getCurrentUser(), // Actor là Admin
-                "USER:DELETE_ANY",
-                "User",
-                userId,
-                Map.of("bannedUsername", credential.getUsername())
-        );
     }
 
     // ---------------------- Search + Filter ----------------------

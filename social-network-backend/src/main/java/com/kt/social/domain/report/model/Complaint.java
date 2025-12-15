@@ -30,8 +30,5 @@ public class Complaint extends BaseEntity {
     private String content; // Lý do khiếu nại: "Tôi không vi phạm vì..."
 
     @Column(columnDefinition = "TEXT")
-    private String adminResponse; // Phản hồi của admin
-
-    @Enumerated(EnumType.STRING)
-    private ComplaintStatus status; // PENDING, RESOLVED_RESTORE (Khôi phục), RESOLVED_KEEP (Giữ nguyên phạt)
+    private String adminResponse;
 }

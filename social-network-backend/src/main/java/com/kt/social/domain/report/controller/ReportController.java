@@ -44,13 +44,13 @@ public class ReportController {
         return ResponseEntity.ok(reportService.getReports(filter, pageable));
     }
 
-    // 3. Admin xử lý report
-    @PutMapping("/{id}/process")
-    @PreAuthorize("hasAuthority('REPORT:PROCESS')")
-    public ResponseEntity<ReportResponse> processReport(
-            @PathVariable Long id,
-            @RequestBody ProcessReportRequest request
-    ) {
-        return ResponseEntity.ok(reportService.processReport(id, request));
-    }
+//    // 3. Admin xử lý report
+//    @PutMapping("/{id}/process")
+//    @PreAuthorize("hasAuthority('REPORT:PROCESS')")
+//    public ResponseEntity<ReportResponse> processReport(
+//            @PathVariable Long id,
+//            @RequestBody ProcessReportRequest request
+//    ) {
+//        return ResponseEntity.ok(reportService.processReport(id, request));
+//    }
 }

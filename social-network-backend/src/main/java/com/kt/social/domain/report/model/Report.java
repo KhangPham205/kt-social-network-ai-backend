@@ -54,28 +54,4 @@ public class Report {
     @CreationTimestamp
     @Column(updatable = false)
     private Instant createdAt;
-
-    // --- Thông tin từ Moderator ---
-    @Builder.Default
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ReportStatus status = ReportStatus.PENDING; // Mặc định là PENDING
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    @Builder.Default
-    private List<ReportHistory> history = new ArrayList<>(); // Lịch sử xử lý
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    @Builder
-    public static class ReportHistory implements Serializable {
-        private Long actorId;       // ID người thực hiện (Admin)
-        private String actorName;   // Tên admin (lưu cứng để lỡ xóa user vẫn còn tên)
-        private ReportStatus oldStatus;
-        private ReportStatus newStatus;
-        private String note;        // Ghi chú của Admin
-        private Instant timestamp;
-    }
 }

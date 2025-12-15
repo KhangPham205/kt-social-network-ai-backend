@@ -7,13 +7,15 @@ import org.springframework.data.domain.Pageable;
 public interface ReportService {
     // Report
     ReportResponse createReport(Long reporterId, CreateReportRequest request);
-    ReportResponse processReport(Long reportId, ProcessReportRequest request);
+    //ReportResponse processReport(Long reportId, ProcessReportRequest request);
     ReportResponse getReportById(Long reportId);
     PageVO<ReportResponse> getReports(String filter, Pageable pageable);
-    PageVO<ComplaintResponse> getComplaints(String filter, Pageable pageable);
 
     // Complaint
     ComplaintResponse createComplaint(CreateComplaintRequest request);
-    ComplaintResponse resolveComplaint(Long complaintId, ResolveComplaintRequest request);
+    PageVO<ComplaintResponse> getComplaints(String filter, Pageable pageable);
+    ComplaintResponse getComplaintById(Long id);
+
+    //ComplaintResponse resolveComplaint(Long complaintId, ResolveComplaintRequest request);
 
 }

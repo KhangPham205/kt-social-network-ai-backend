@@ -21,4 +21,7 @@ public interface MessageService {
 
     // Lấy conversation list cho user (kèm lastMessage preview)
     List<Map<String,Object>> getUserConversations(Long userId);
+
+    // Xóa mềm message (chỉ ẩn với user, không xóa DB)
+    void softDeleteMessage(String messageId);
 }

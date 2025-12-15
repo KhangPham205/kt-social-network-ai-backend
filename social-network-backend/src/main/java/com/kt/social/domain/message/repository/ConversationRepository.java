@@ -1,6 +1,9 @@
 package com.kt.social.domain.message.repository;
 
+import com.kt.social.domain.admin.dto.ModerationMessageResponse;
 import com.kt.social.domain.message.model.Conversation;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -43,4 +46,26 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
             @Param("userId1") Long userId1,
             @Param("userId2") Long userId2
     );
+
+    @Query(value = """
+        SELECT 
+            CAST(msg ->> 'id' AS TEXT) as id,
+            c.id as conversationId,
+            CAST(msg ->> 'senderId' AS BIGINT) as senderId,
+            msg ->> 'senderName' as senderName,
+            msg ->> 'senderAvatar' as senderAvatar,
+            msg ->> 'content' as content,
+            msg ->> 'createdAt' as sentAt,
+            NULL as mediaUrls -- Tạm thời để null hoặc xử lý phức tạp hơn nếu cần
+        FROM conversations c,
+             jsonb_array_elements(c.messages) msg
+        WHERE (msg ->> 'isDeleted')::boolean = true
+    """,
+            countQuery = """
+        SELECT count(*) 
+        FROM conversations c, jsonb_array_elements(c.messages) msg
+        WHERE (msg ->> 'isDeleted')::boolean = true
+    """,
+            nativeQuery = true)
+    Page<ModerationMessageResponse> findDeletedMessages(Pageable pageable);
 }

@@ -66,11 +66,4 @@ public class AdminController {
     ) {
         return ResponseEntity.ok(userService.updateUserAsAdmin(userId, request));
     }
-
-    @DeleteMapping("/{userId}")
-    @PreAuthorize("hasAuthority('USER:DELETE_ANY')")
-    public ResponseEntity<Void> deleteUserAsAdmin(@PathVariable Long userId) {
-        userService.deleteUserAsAdmin(userId);
-        return ResponseEntity.noContent().build();
-    }
 }

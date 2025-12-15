@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -26,11 +27,18 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             "u.displayName, " +
             "u.avatarUrl, " +
             "c.status, " +
-            "COUNT(r)) " +        // Đếm số lượng report liên quan đến user này
+            "COUNT(r) as reportCount) " + // Đặt alias là reportCount
             "FROM User u " +
             "JOIN u.credential c " +
-            // 🔥 JOIN CHÍNH XÁC: Join vào cột targetUserId mới thêm
             "LEFT JOIN Report r ON u.id = r.targetUserId " +
-            "GROUP BY u.id, c.username, c.email, u.displayName, u.avatarUrl, c.status")
-    Page<UserModerationResponse> findAllUsersWithReportCount(Pageable pageable);
+            "WHERE (:keyword IS NULL OR :keyword = '' OR " +
+            "LOWER(c.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(c.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(u.displayName) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+            "GROUP BY u.id, c.username, c.email, u.displayName, u.avatarUrl, c.status " +
+            "ORDER BY reportCount DESC") // 🔥 Sắp xếp cứng tại đây để tránh lỗi
+    Page<UserModerationResponse> findAllUsersWithReportCount(
+            @Param("keyword") String keyword,
+            Pageable pageable
+    );
 }

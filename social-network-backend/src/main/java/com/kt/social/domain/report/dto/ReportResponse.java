@@ -25,6 +25,4 @@ public class ReportResponse {
     private String customReason;
     private ReportStatus status;
     private Instant createdAt;
-
-    private List<Report.ReportHistory> history;
 }

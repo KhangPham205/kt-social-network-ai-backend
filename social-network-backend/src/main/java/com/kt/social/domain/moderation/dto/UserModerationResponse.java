@@ -10,7 +10,7 @@ public class UserModerationResponse {
     private Long userId;
     private String username;
     private String email;
-    private String displayName; // Thêm hiển thị tên thật
+    private String displayName;
     private String avatar;
     private boolean isLocked;
     private Long reportCount;

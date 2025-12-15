@@ -27,9 +27,7 @@ public interface UserService {
     UserRelationDto getRelationWithUser(Long targetUserId);
 
     // Thêm phương thức này vào Interface
-    void updateUserStatus(Long userId, AccountStatus newStatus, String reason);
     PageVO<AdminUserViewDto> getAllUsers(String filter, Pageable pageable);
     AdminUserViewDto getUserByIdAsAdmin(Long userId);
     AdminUserViewDto updateUserAsAdmin(Long userId, AdminUpdateUserRequest request);
-    void deleteUserAsAdmin(Long userId);
 }

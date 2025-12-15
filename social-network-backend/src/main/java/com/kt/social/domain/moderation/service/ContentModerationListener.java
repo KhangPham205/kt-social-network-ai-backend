@@ -97,7 +97,7 @@ public class ContentModerationListener {
         // 3. Ghi Moderation Log (System Action -> actor = null)
         ModerationLog logEntry = ModerationLog.builder()
                 .targetType(event.getTargetType())
-                .targetId(event.getTargetId())
+                .targetId(event.getTargetId().toString())
                 .action("AUTO_BAN")
                 .reason(reason)
                 .actor(null) // System

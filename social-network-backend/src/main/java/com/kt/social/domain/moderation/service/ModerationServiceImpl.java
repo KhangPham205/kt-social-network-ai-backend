@@ -1,17 +1,28 @@
 package com.kt.social.domain.moderation.service;
 
+import com.kt.social.auth.enums.AccountStatus;
+import com.kt.social.auth.model.UserCredential;
+import com.kt.social.auth.repository.UserCredentialRepository;
+import com.kt.social.common.exception.AccessDeniedException;
+import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.admin.dto.ModerationMessageResponse;
 import com.kt.social.domain.admin.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.audit.service.ActivityLogService;
+import com.kt.social.domain.comment.dto.CommentResponse;
+import com.kt.social.domain.comment.mapper.CommentMapper;
 import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
+import com.kt.social.domain.message.service.MessageService;
 import com.kt.social.domain.moderation.dto.ModerationLogResponse;
 import com.kt.social.domain.moderation.dto.UserModerationResponse;
 import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
+import com.kt.social.domain.post.dto.PostResponse;
+import com.kt.social.domain.post.mapper.PostMapper;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.enums.TargetType;
@@ -42,37 +53,62 @@ public class ModerationServiceImpl implements ModerationService {
 
     private final UserService userService;
     private final UserRepository userRepository;
+    private final UserCredentialRepository userCredentialRepository;
+    private final ActivityLogService activityLogService;
+    private final MessageService messageService;
     private final ConversationRepository conversationRepository;
     private final ReportRepository reportRepository;
     private final ReportMapper reportMapper;
     private final ModerationLogRepository moderationLogRepository;
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
+    private final PostMapper postMapper;
+    private final CommentMapper commentMapper;
 
+    @Override
     @Transactional(readOnly = true)
     public ModerationUserDetailResponse getUserDetailForAdmin(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Tính số lần User này bị report và đã duyệt (TargetType = USER)
-        // Lưu ý: Nếu muốn tính tổng cả việc Post/Comment của user bị report thì query sẽ phức tạp hơn.
-        // Ở đây tạm tính số lần Profile bị report.
-        long violations = reportRepository.countByTargetTypeAndTargetIdAndStatus(
-                TargetType.USER,
-                userId,
-                ReportStatus.APPROVED
-        );
+        // 🔥 SỬA: Đếm tổng số Report nhắm vào user này (targetUserId)
+        // Không còn check ReportStatus.APPROVED nữa
+        long totalReports = reportRepository.countByTargetUserId(userId);
 
         return ModerationUserDetailResponse.builder()
                 .id(user.getId())
                 .displayName(user.getDisplayName())
                 .avatarUrl(user.getAvatarUrl())
-                .email(user.getCredential().getEmail()) // Lấy từ UserCredential
-                .status(user.getCredential().getStatus()) // Lấy status
+                .email(user.getCredential().getEmail())
+                .status(user.getCredential().getStatus())
                 .bio(user.getUserInfo() != null ? user.getUserInfo().getBio() : null)
-                .violationCount(violations)
+                .violationCount(totalReports) // Trả về tổng số lần bị báo cáo
                 .createdAt(user.getCreatedAt())
                 .lastActiveAt(user.getLastActiveAt())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<ReportResponse> getUserViolations(Long userId, Pageable pageable) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        // 🔥 SỬA: Lấy tất cả report nhắm vào user này
+        Page<Report> page = reportRepository.findByTargetUserId(userId, pageable);
+
+        List<ReportResponse> content = page.getContent().stream()
+                .map(reportMapper::toResponse)
+                .toList();
+
+        return PageVO.<ReportResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
                 .build();
     }
 
@@ -135,22 +171,76 @@ public class ModerationServiceImpl implements ModerationService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageVO<ReportResponse> getUserViolations(Long userId, Pageable pageable) {
-        if (!userRepository.existsById(userId)) {
-            throw new ResourceNotFoundException("User not found");
+    public Page<UserModerationResponse> getUsersWithReportCount(Pageable pageable, String filter) {
+        // 1. Xử lý Filter (Giả sử filter gửi lên dạng "username=='tung'")
+        // Vì query aggregate phức tạp, ta chỉ tách lấy value để search keyword đơn giản
+        String keyword = null;
+        if (filter != null && !filter.isBlank()) {
+            // Logic bóc tách đơn giản: Nếu filter chứa "=='", cắt lấy phần sau
+            // Ví dụ: "username=='admin'" -> keyword = "admin"
+            // Bạn có thể dùng thư viện RSQL parser để lấy chuẩn hơn nếu muốn
+            if (filter.contains("=='")) {
+                keyword = filter.split("=='")[1].replace("'", "").trim();
+            } else {
+                keyword = filter; // Search all
+            }
         }
 
-        Page<Report> page = reportRepository.findAllViolationsByUserId(
-                userId,
-                ReportStatus.APPROVED,
-                pageable
+        // 2. Tạo PageRequest mới nhưng BỎ qua Sort từ client gửi lên
+        // (Vì ta đã sort cứng trong Query rồi, tránh lỗi "Property reportCount not found")
+        Pageable newPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+
+        return userRepository.findAllUsersWithReportCount(keyword, newPageable);
+    }
+
+    // --- Lấy danh sách POST vi phạm ---
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<PostResponse> getFlaggedPosts(String filter, Pageable pageable) {
+        // Mặc định tìm các bài đã bị xóa (deletedAt khác null) HOẶC bị ban (isSystemBan = true)
+        // Nếu muốn filter động thì dùng Specification tương tự các hàm khác
+        Specification<Post> spec = (root, query, cb) -> cb.or(
+                cb.isNotNull(root.get("deletedAt")),
+                cb.isTrue(root.get("isSystemBan"))
         );
 
-        List<ReportResponse> content = page.getContent().stream()
-                .map(reportMapper::toResponse)
+        // Nếu có filter text gửi lên (ví dụ lọc theo author name), bạn có thể kết hợp thêm RSQL tại đây
+
+        Page<Post> page = postRepository.findAll(spec, pageable);
+        List<PostResponse> content = page.getContent().stream()
+                .map(postMapper::toDto) // Sử dụng PostMapper có sẵn
                 .toList();
 
-        return PageVO.<ReportResponse>builder()
+        return buildPageVO(page, content);
+    }
+
+    // --- Lấy danh sách COMMENT vi phạm ---
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<CommentResponse> getFlaggedComments(String filter, Pageable pageable) {
+        Specification<Comment> spec = (root, query, cb) -> cb.isNotNull(root.get("deletedAt"));
+
+        Page<Comment> page = commentRepository.findAll(spec, pageable);
+        List<CommentResponse> content = page.getContent().stream()
+                .map(commentMapper::toDto)
+                .toList();
+
+        return buildPageVO(page, content);
+    }
+
+    // --- Lấy danh sách MESSAGE vi phạm (Đã bị xóa mềm) ---
+    @Override
+    @Transactional(readOnly = true)
+    public PageVO<ModerationMessageResponse> getFlaggedMessages(String filter, Pageable pageable) {
+        // Gọi Repository custom để query JSONB tìm message có isDeleted = true
+        Page<ModerationMessageResponse> page = conversationRepository.findDeletedMessages(pageable);
+
+        return buildPageVO(page, page.getContent());
+    }
+
+    // Helper method để build PageVO cho gọn
+    private <T> PageVO<T> buildPageVO(Page<?> page, List<T> content) {
+        return PageVO.<T>builder()
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -158,19 +248,6 @@ public class ModerationServiceImpl implements ModerationService {
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Page<UserModerationResponse> getUsersWithReportCount(int page, int size) {
-        // Sắp xếp mặc định: Người bị report nhiều nhất lên đầu
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "reportCount"));
-
-        // Lưu ý: Sort trong PageRequest với custom query 'new DTO...' đôi khi phức tạp.
-        // Nếu Sort trên bị lỗi, hãy đổi thành Sort.unsorted() và handle sort trong Query hoặc Frontend.
-        // Cách an toàn nhất là để sort tại Frontend hoặc Query cứng "ORDER BY COUNT(r) DESC".
-
-        return userRepository.findAllUsersWithReportCount(PageRequest.of(page, size));
     }
 
     @Override
@@ -206,18 +283,94 @@ public class ModerationServiceImpl implements ModerationService {
 
     @Override
     @Transactional
-    public void restoreContent(Long id, TargetType targetType) {
+    public void updateUserStatus(Long targetUserId, AccountStatus newStatus, String reason) {
+        User currentUser = userService.getCurrentUser();
+
+        // 1. Kiểm tra User tồn tại
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // 2. Validate: Không được tự khóa chính mình
+        if (currentUser.getId().equals(targetUserId)) {
+            throw new BadRequestException("Bạn không thể tự khóa/mở khóa tài khoản của chính mình.");
+        }
+
+        // 3. Validate: Moderator không được khóa Admin (Logic phân quyền cơ bản)
+        boolean isActorAdmin = currentUser.getCredential().getRoles().stream()
+                .anyMatch(r -> r.getName().equals("ADMIN"));
+        boolean isTargetAdmin = targetUser.getCredential().getRoles().stream()
+                .anyMatch(r -> r.getName().equals("ADMIN"));
+
+        if (isTargetAdmin && !isActorAdmin) {
+            throw new AccessDeniedException("Moderator không có quyền khóa tài khoản Admin.");
+        }
+
+        // 4. Cập nhật trạng thái trong UserCredential
+        UserCredential credential = targetUser.getCredential();
+        credential.setStatus(newStatus);
+
+        userCredentialRepository.save(credential);
+        // userRepository.save(targetUser); // Nếu có thay đổi ở bảng User
+
+        // 5. Ghi Log hành động
+        activityLogService.logActivity(
+                currentUser,
+                newStatus == AccountStatus.BLOCKED ? "USER:BLOCK_ACCOUNT" : "USER:UNBLOCK_ACCOUNT",
+                "User",
+                targetUserId,
+                Map.of("reason", reason != null ? reason : "No reason provided",
+                        "newStatus", newStatus.toString())
+        );
+    }
+
+    @Override
+    @Transactional
+    public void blockContent(Object id, TargetType targetType) { // Đổi Long id -> Object id hoặc String id
+        User admin = userService.getCurrentUser();
+        String idStr = String.valueOf(id); // Chuyển về String để xử lý chung
+
+        if (targetType == TargetType.POST) {
+            Long postId = Long.valueOf(idStr); // Parse lại Long cho Post
+            Post post = postRepository.findById(postId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+            post.setDeletedAt(Instant.now());
+            post.setSystemBan(true);
+            postRepository.save(post);
+
+        } else if (targetType == TargetType.COMMENT) {
+            Long commentId = Long.valueOf(idStr); // Parse lại Long cho Comment
+            Comment comment = commentRepository.findById(commentId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
+            comment.setDeletedAt(Instant.now());
+            commentRepository.save(comment);
+
+        } else if (targetType == TargetType.MESSAGE) {
+            // 🔥 LOGIC MỚI CHO MESSAGE
+            // Gọi sang MessageService để xử lý logic JSON
+            messageService.softDeleteMessage(idStr);
+        }
+
+        // Ghi Log
+        // Lưu ý: targetId trong log của bạn đang là Long, có thể cần sửa entity ModerationLog
+        // để targetId là String nếu muốn lưu UUID message.
+        saveLog(admin, targetType, idStr, "BLOCK", "Admin blocked content");
+    }
+
+    @Override
+    @Transactional
+    public void unblockContent(Long id, TargetType targetType) {
         User admin = userService.getCurrentUser();
 
-        // 1. Khôi phục nội dung (Post/Comment)
         if (targetType == TargetType.POST) {
-            // Lưu ý: Cần dùng hàm find riêng để tìm được cả bài đã bị soft-delete
+            // Dùng findByIdIncludingDeleted đã viết ở bước trước để tìm bài bị xóa
             Post post = postRepository.findByIdIncludingDeleted(id)
                     .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
             post.setDeletedAt(null);
             post.setSystemBan(false);
-            post.setViolationDetails(null); // Xóa lý do vi phạm cũ (tuỳ chọn)
+            post.setViolationDetails(null);
             postRepository.save(post);
 
         } else if (targetType == TargetType.COMMENT) {
@@ -225,43 +378,83 @@ public class ModerationServiceImpl implements ModerationService {
                     .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
             comment.setDeletedAt(null);
-            // comment.setSystemBan(false); // Nếu comment có field này
             commentRepository.save(comment);
         }
 
-        // Tìm tất cả các report ĐÃ DUYỆT (APPROVED) liên quan đến nội dung này
-        List<Report> relatedReports = reportRepository.findAllByTargetTypeAndTargetIdAndStatus(
-                targetType, id, ReportStatus.APPROVED
-        );
+        // Ghi Log hành động
+        saveLog(admin, targetType, String.valueOf(id), "UNBLOCK", "Admin restored content");
+    }
 
-        if (!relatedReports.isEmpty()) {
-            for (Report report : relatedReports) {
-                // Ghi lại lịch sử thay đổi của Report
-                report.getHistory().add(Report.ReportHistory.builder()
-                        .actorId(admin.getId())
-                        .actorName(admin.getDisplayName())
-                        .oldStatus(ReportStatus.APPROVED)
-                        .newStatus(ReportStatus.REJECTED)
-                        .note("System: Tự động từ chối do Admin đã khôi phục nội dung gốc.")
-                        .timestamp(Instant.now())
-                        .build());
-
-                // Đổi trạng thái thành REJECTED (Coi như báo cáo sai/không còn hiệu lực)
-                report.setStatus(ReportStatus.REJECTED);
-            }
-            reportRepository.saveAll(relatedReports);
-        }
-
-        // 3. Ghi Log Moderation (Admin Action)
+    // --- Helper ghi log ---
+    private void saveLog(User actor, TargetType type, String targetId, String action, String reason) {
         moderationLogRepository.save(ModerationLog.builder()
-                .targetType(targetType)
-                .targetId(id)
-                .action("ADMIN_RESTORE")
-                .actor(admin)
-                .reason("Admin restored content manually")
+                .actor(actor)
+                .targetType(type)
+                .targetId(targetId)
+                .action(action)
+                .reason(reason)
                 .createdAt(Instant.now())
                 .build());
     }
+
+//    @Override
+//    @Transactional
+//    public void unblock(Long id, TargetType targetType) {
+//        User admin = userService.getCurrentUser();
+//
+//        // 1. Khôi phục nội dung (Post/Comment)
+//        if (targetType == TargetType.POST) {
+//            // Lưu ý: Cần dùng hàm find riêng để tìm được cả bài đã bị soft-delete
+//            Post post = postRepository.findByIdIncludingDeleted(id)
+//                    .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+//
+//            post.setDeletedAt(null);
+//            post.setSystemBan(false);
+//            post.setViolationDetails(null); // Xóa lý do vi phạm cũ (tuỳ chọn)
+//            postRepository.save(post);
+//
+//        } else if (targetType == TargetType.COMMENT) {
+//            Comment comment = commentRepository.findByIdIncludingDeleted(id)
+//                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+//
+//            comment.setDeletedAt(null);
+//            // comment.setSystemBan(false); // Nếu comment có field này
+//            commentRepository.save(comment);
+//        }
+//
+//        // Tìm tất cả các report ĐÃ DUYỆT (APPROVED) liên quan đến nội dung này
+//        List<Report> relatedReports = reportRepository.findAllByTargetTypeAndTargetIdAndStatus(
+//                targetType, id, ReportStatus.APPROVED
+//        );
+//
+//        if (!relatedReports.isEmpty()) {
+//            for (Report report : relatedReports) {
+//                // Ghi lại lịch sử thay đổi của Report
+//                report.getHistory().add(Report.ReportHistory.builder()
+//                        .actorId(admin.getId())
+//                        .actorName(admin.getDisplayName())
+//                        .oldStatus(ReportStatus.APPROVED)
+//                        .newStatus(ReportStatus.REJECTED)
+//                        .note("System: Tự động từ chối do Admin đã khôi phục nội dung gốc.")
+//                        .timestamp(Instant.now())
+//                        .build());
+//
+//                // Đổi trạng thái thành REJECTED (Coi như báo cáo sai/không còn hiệu lực)
+//                report.setStatus(ReportStatus.REJECTED);
+//            }
+//            reportRepository.saveAll(relatedReports);
+//        }
+//
+//        // 3. Ghi Log Moderation (Admin Action)
+//        moderationLogRepository.save(ModerationLog.builder()
+//                .targetType(targetType)
+//                .targetId(id)
+//                .action("ADMIN_RESTORE")
+//                .actor(admin)
+//                .reason("Admin restored content manually")
+//                .createdAt(Instant.now())
+//                .build());
+//    }
 
     // Helper map entity -> dto
     private ModerationLogResponse mapLogToResponse(ModerationLog log) {

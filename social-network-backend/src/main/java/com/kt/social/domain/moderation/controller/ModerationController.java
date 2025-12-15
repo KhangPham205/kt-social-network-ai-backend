@@ -66,59 +66,13 @@ public class ModerationController {
     }
 
     @GetMapping("/users")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
     public ResponseEntity<Page<UserModerationResponse>> getUsersWithReports(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable) {
 
-        return ResponseEntity.ok(moderationService.getUsersWithReportCount(page, size));
-    }
-
-    /**
-     * Endpoint Khóa tài khoản
-     * Truy cập: Admin, Moderator
-     */
-    @PutMapping("/users/{id}/block")
-    @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
-    public ResponseEntity<String> blockUser(
-            @PathVariable Long id,
-            @RequestBody ChangeStatusRequest request
-    ) {
-        String reason = (request != null) ? request.getReason() : "";
-        userService.updateUserStatus(id, AccountStatus.BLOCKED, reason);
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Endpoint Mở khóa tài khoản
-     * Truy cập: Admin, Moderator
-     */
-    @PutMapping("/users/{id}/unblock")
-    @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
-    public ResponseEntity<String> unblockUser(
-            @PathVariable Long id,
-            @RequestBody ChangeStatusRequest request
-    ) {
-        String reason = (request != null) ? request.getReason() : "";
-        userService.updateUserStatus(id, AccountStatus.ACTIVE, reason);
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Endpoint khôi phục nội dung đã bị xóa (Post, Comment)
-     * Truy cập: Admin, Moderator
-     */
-    @PutMapping("/{type}/{id}/restore")
-    @PreAuthorize("hasAnyAuthority('POST:DELETE_ANY', 'MODERATION:ACCESS')")
-    public ResponseEntity<Map<String, String>> restoreContent(
-            @PathVariable TargetType type,
-            @PathVariable Long id
-    ) {
-        moderationService.restoreContent(id, type);
-        return ResponseEntity.ok(Map.of(
-                "message", "Content has been restored successfully.",
-                "status", "success",
-                "code", "200"
-        ));
+        // Lưu ý: pageable ở đây sẽ hứng: ?page=0&size=10
+        return ResponseEntity.ok(moderationService.getUsersWithReportCount(pageable, filter));
     }
 
     /**
@@ -135,7 +89,44 @@ public class ModerationController {
         return ResponseEntity.ok(moderationService.getModerationLogs(filter, pageable));
     }
 
+    /**
+     * Lấy danh sách POST bị hệ thống chặn/xóa
+     */
+    @GetMapping("/posts/flagged")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
+    public ResponseEntity<PageVO<PostResponse>> getFlaggedPosts(
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(moderationService.getFlaggedPosts(filter, pageable));
+    }
+
+    /**
+     * Lấy danh sách COMMENT bị hệ thống chặn/xóa
+     */
+    @GetMapping("/comments/flagged")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
+    public ResponseEntity<PageVO<CommentResponse>> getFlaggedComments(
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(moderationService.getFlaggedComments(filter, pageable));
+    }
+
+    /**
+     * Lấy danh sách MESSAGE vi phạm (đã bị xóa mềm)
+     */
+    @GetMapping("/messages/flagged")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
+    public ResponseEntity<PageVO<ModerationMessageResponse>> getFlaggedMessages(
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(moderationService.getFlaggedMessages(filter, pageable));
+    }
+
     @GetMapping("/comment/{id}")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
     public ResponseEntity<CommentResponse> getCommentById(
             @PathVariable Long id
     ) {
@@ -143,7 +134,67 @@ public class ModerationController {
     }
 
     @GetMapping("/post/{id}")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
     public ResponseEntity<PostResponse> getPostById(@PathVariable Long id) {
         return ResponseEntity.ok(postService.getPostById(id));
+    }
+
+    /**
+     * Endpoint Khóa tài khoản
+     * Truy cập: Admin, Moderator
+     */
+    @PutMapping("/users/{id}/block")
+    @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
+    public ResponseEntity<String> blockUser(
+            @PathVariable Long id,
+            @RequestBody ChangeStatusRequest request
+    ) {
+        String reason = (request != null) ? request.getReason() : "";
+        moderationService.updateUserStatus(id, AccountStatus.BLOCKED, reason);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Endpoint Mở khóa tài khoản
+     * Truy cập: Admin, Moderator
+     */
+    @PutMapping("/users/{id}/unblock")
+    @PreAuthorize("hasAnyAuthority('USER:BLOCK', 'MODERATION:ACCESS')")
+    public ResponseEntity<String> unblockUser(
+            @PathVariable Long id,
+            @RequestBody ChangeStatusRequest request
+    ) {
+        String reason = (request != null) ? request.getReason() : "";
+        moderationService.updateUserStatus(id, AccountStatus.ACTIVE, reason);
+        return ResponseEntity.ok().build();
+    }
+
+
+    /**
+     * Endpoint khóa nội dung (Post, Comment)
+     * Truy cập: Admin, Moderator
+     */
+    @PutMapping("/{type}/{id}/block")
+    @PreAuthorize("hasAnyAuthority('POST:DELETE_ANY', 'MODERATION:ACCESS')")
+    public ResponseEntity<Map<String, String>> blockContent(
+            @PathVariable TargetType type,
+            @PathVariable Long id
+    ) {
+        moderationService.blockContent(id, type);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Endpoint khôi phục nội dung đã bị xóa (Post, Comment)
+     * Truy cập: Admin, Moderator
+     */
+    @PutMapping("/{type}/{id}/restore")
+    @PreAuthorize("hasAnyAuthority('POST:DELETE_ANY', 'MODERATION:ACCESS')")
+    public ResponseEntity<Map<String, String>> unblockContent(
+            @PathVariable TargetType type,
+            @PathVariable Long id
+    ) {
+        moderationService.unblockContent(id, type);
+        return ResponseEntity.ok().build();
     }
 }

@@ -4,6 +4,7 @@ import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.post.model.Post;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,4 +37,7 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     }
 
     @Query(value = "SELECT * FROM comments WHERE id = :id", nativeQuery = true)
-    Optional<Comment> findByIdIncludingDeleted(@Param("id") Long id);}
+    Optional<Comment> findByIdIncludingDeleted(@Param("id") Long id);
+
+    Page<Comment> findAll(Specification<Comment> spec, Pageable pageable);
+}

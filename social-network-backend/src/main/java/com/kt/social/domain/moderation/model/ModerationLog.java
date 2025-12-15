@@ -22,7 +22,7 @@ public class ModerationLog extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private TargetType targetType; // POST, COMMENT, USER
 
-    private Long targetId;
+    private String targetId;
 
     private String action; // AUTO_BAN, ADMIN_BAN, ADMIN_RESTORE
 

@@ -12,7 +12,7 @@ import java.util.List;
 public class ModerationLogResponse {
     private Long id;
     private TargetType targetType;  // POST, COMMENT, USER
-    private Long targetId;          // ID của đối tượng bị xử lý
+    private String targetId;          // ID của đối tượng bị xử lý
     private String action;          // AUTO_BAN, ADMIN_BAN, ADMIN_RESTORE
     private String reason;          // Lý do
 
