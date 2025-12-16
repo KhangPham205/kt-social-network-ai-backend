@@ -39,14 +39,10 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     @Query(value = "SELECT * FROM comment WHERE id = :id", nativeQuery = true)
     Optional<Comment> findByIdIncludingDeleted(@Param("id") Long id);
 
-    @Query(value = "SELECT * FROM comment c WHERE c.deleted_at IS NOT NULL",
-            countQuery = "SELECT count(*) FROM comments c WHERE c.deleted_at IS NOT NULL",
-            nativeQuery = true)
+    @Query("SELECT c FROM Comment c WHERE c.deletedAt IS NOT NULL")
     Page<Comment> findDeletedComments(Pageable pageable);
 
-    @Query(value = "SELECT * FROM comment c WHERE c.deleted_at IS NOT NULL AND c.content ILIKE %:filter%",
-            countQuery = "SELECT count(*) FROM comments c WHERE c.deleted_at IS NOT NULL AND c.content ILIKE %:filter%",
-            nativeQuery = true)
+    @Query("SELECT c FROM Comment c WHERE c.deletedAt IS NOT NULL AND c.content LIKE %:filter%")
     Page<Comment> findDeletedCommentsWithFilter(@Param("filter") String filter, Pageable pageable);
 
     Page<Comment> findAll(Specification<Comment> spec, Pageable pageable);
