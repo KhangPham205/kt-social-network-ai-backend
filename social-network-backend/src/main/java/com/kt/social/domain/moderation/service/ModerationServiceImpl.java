@@ -247,14 +247,21 @@ public class ModerationServiceImpl implements ModerationService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getFlaggedComments(String filter, Pageable pageable) {
-        Specification<Comment> spec = (root, query, cb) -> cb.isNotNull(root.get("deletedAt"));
-        Page<Comment> page = commentRepository.findAll(spec, pageable);
+
+        // 🔥 FIX: Không dùng findAll(spec) nữa
+        Page<Comment> page;
+
+        if (filter != null && !filter.isBlank()) {
+            page = commentRepository.findDeletedCommentsWithFilter(filter, pageable);
+        } else {
+            page = commentRepository.findDeletedComments(pageable);
+        }
 
         List<CommentResponse> content = page.getContent().stream()
                 .map(commentMapper::toDto)
                 .toList();
 
-        // 🔥 GỌI HÀM BỔ SUNG COUNT
+        // Gọi hàm bổ sung count (giữ nguyên logic của bạn)
         enrichWithCounts(content, CommentResponse::getId, CommentResponse::setReportCount, CommentResponse::setComplaintCount, TargetType.COMMENT);
 
         return buildPageVO(page, content);

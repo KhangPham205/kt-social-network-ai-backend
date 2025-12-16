@@ -19,7 +19,7 @@ public class MessageResponse {
     private String senderAvatar;
     private Long replyToId;
     private String content;
-    private List<Map<String,Object>> media; // media as list of maps { url, type, ... }
+    private List<Map<String, Object>> media; // media as list of maps { url, type, ... }
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Instant createdAt;
     private Boolean isRead;

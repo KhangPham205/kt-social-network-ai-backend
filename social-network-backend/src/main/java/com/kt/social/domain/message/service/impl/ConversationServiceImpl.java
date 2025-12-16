@@ -312,16 +312,15 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional(readOnly = true)
     public List<ConversationSummaryResponse> getUserConversations(Long userId) {
-        // 1. Lấy tất cả ConversationID mà user tham gia
         List<ConversationMember> members = memberRepository.findConversationsByUserId(userId);
 
-        // 2. Chuyển đổi sang DTO
-        // Lưu ý: Cần đảm bảo hàm findConversationsByUserId trong Repo dùng JOIN FETCH để lấy luôn Conversation
-        // để tránh N+1 Query.
         return members.stream()
                 .map(ConversationMember::getConversation)
-                .distinct() // Tránh trùng lặp nếu query trả về nhiều dòng
-                .sorted(Comparator.comparing(Conversation::getUpdatedAt).reversed()) // Sắp xếp mới nhất lên đầu
+                .distinct()
+                .sorted(Comparator.comparing(
+                        (Conversation c) -> c.getUpdatedAt() != null ? c.getUpdatedAt() : c.getCreatedAt(),
+                        Comparator.nullsLast(Comparator.naturalOrder())
+                ).reversed())
                 .map(c -> toConversationSummaryDto(c, userId))
                 .collect(Collectors.toList());
     }
@@ -451,10 +450,9 @@ public class ConversationServiceImpl implements ConversationService {
     // ------------------------- HELPER METHODS -------------------------
 
     private ConversationSummaryResponse toConversationSummaryDto(Conversation c, Long viewerId) {
-        // 🔥 FIX: Lấy tin nhắn CUỐI CÙNG (Last), không phải đầu tiên (First)
         Map<String, Object> lastMessage = null;
         if (c.getMessages() != null && !c.getMessages().isEmpty()) {
-            lastMessage = c.getMessages().get(c.getMessages().size() - 1);
+            lastMessage = c.getMessages().get(0);
         }
 
         // Lazy Loading Warning: Đảm bảo c.getMembers() đã được fetch hoặc Transaction còn active
