@@ -513,8 +513,14 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
             // Nếu Viewer là Receiver -> Target là Sender
             Long targetIdKey = senderId.equals(viewerId) ? receiverId : senderId;
 
+            FriendshipResponse dto = FriendshipResponse.builder()
+                    .status(f.getStatus()) // Ví dụ: FRIEND
+                    .senderId(senderId)    // Luôn đúng: ID người gửi thực tế trong DB
+                    .receiverId(receiverId)// Luôn đúng: ID người nhận thực tế trong DB
+                    .build();
+
             // Convert sang DTO và put vào Map với key là TargetId
-            friendshipMap.put(targetIdKey, FriendshipResponse.from(f, viewerId));
+            friendshipMap.put(targetIdKey, dto);
         }
 
         // Map kết quả cuối cùng
