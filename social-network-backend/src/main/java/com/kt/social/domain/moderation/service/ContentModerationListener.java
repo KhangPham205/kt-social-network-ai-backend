@@ -39,7 +39,7 @@ public class ContentModerationListener {
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final ModerationLogRepository moderationLogRepository;
-    private final ReportRepository reportRepository; // 🔥 THÊM MỚI
+    private final ReportRepository reportRepository;
     private final StorageService storageService;
     private final NotificationService notificationService;
 
@@ -135,7 +135,7 @@ public class ContentModerationListener {
     }
 
     /**
-     * 🔥 Helper: Tạo Report hệ thống để Admin quản lý
+     * Helper: Tạo Report hệ thống để Admin quản lý
      */
     private void createSystemReport(ContentCreatedEvent event, String reason) {
         try {

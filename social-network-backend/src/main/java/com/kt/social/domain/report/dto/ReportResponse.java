@@ -23,6 +23,6 @@ public class ReportResponse {
 
     private ReportReason reason;
     private String customReason;
-    private ReportStatus status;
+    private Boolean isBannedBySystem;
     private Instant createdAt;
 }

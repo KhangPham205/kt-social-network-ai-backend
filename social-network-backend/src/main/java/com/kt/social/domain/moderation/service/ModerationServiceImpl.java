@@ -490,7 +490,7 @@ public class ModerationServiceImpl implements ModerationService {
             boolean exists = reportRepository.existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(targetId, targetType);
             if (exists) return;
 
-            String systemNote = String.format("[SYSTEM AI DETECTED] Hệ thống tự động chặn. Lý do chi tiết: %s", aiReason);
+//            String systemNote = String.format("[SYSTEM AI DETECTED] Hệ thống tự động chặn. Lý do chi tiết: %s", aiReason);
 
             Report report = Report.builder()
                     .targetId(targetId)
