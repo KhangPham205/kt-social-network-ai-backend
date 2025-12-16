@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -19,7 +20,7 @@ public class ModerationMessageResponse {
     private String content;
     private String sentAt; // Timestamp trong JSON thường là String
 
-    private List<String> mediaUrls;
+    private List<Map<String, String>> media;
 
     private Instant deletedAt;
 

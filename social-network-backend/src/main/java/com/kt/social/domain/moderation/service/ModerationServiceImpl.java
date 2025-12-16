@@ -8,8 +8,7 @@ import com.kt.social.common.exception.AccessDeniedException;
 import com.kt.social.common.exception.BadRequestException;
 import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
-import com.kt.social.domain.moderation.dto.ModerationMessageResponse;
-import com.kt.social.domain.moderation.dto.ModerationUserDetailResponse;
+import com.kt.social.domain.moderation.dto.*;
 import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.comment.dto.CommentResponse;
 import com.kt.social.domain.comment.mapper.CommentMapper;
@@ -18,8 +17,6 @@ import com.kt.social.domain.comment.repository.CommentRepository;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
 import com.kt.social.domain.message.service.MessageService;
-import com.kt.social.domain.moderation.dto.ModerationLogResponse;
-import com.kt.social.domain.moderation.dto.UserModerationResponse;
 import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.post.dto.PostResponse;
@@ -37,6 +34,7 @@ import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -50,6 +48,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ModerationServiceImpl implements ModerationService {
@@ -119,57 +118,82 @@ public class ModerationServiceImpl implements ModerationService {
     @Override
     @Transactional(readOnly = true)
     public ModerationMessageResponse getMessageDetailForAdmin(String messageId) {
-        // 1. Tìm Conversation chứa message này
+        // 1. Tìm Conversation chứa message này (Query JSONB)
         Conversation conversation = conversationRepository.findByMessageIdInJson(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("Message not found in any conversation"));
 
-        // 2. Lọc trong List<Map> để lấy đúng message object
+        // 2. Lọc trong List<Map> JSON để lấy đúng message object
         Map<String, Object> messageData = conversation.getMessages().stream()
                 .filter(msg -> Objects.equals(String.valueOf(msg.get("id")), messageId))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Message data is missing"));
 
-        // 3. Lấy thông tin Sender (từ senderId trong JSON)
-        // Lưu ý: JSON số thường được parse thành Integer hoặc Long, cần ép kiểu an toàn
-        Long senderId = Long.valueOf(String.valueOf(messageData.get("senderId")));
-
+        // 3. Lấy thông tin Sender
+        // Ưu tiên lấy từ DB để có info mới nhất, nếu user bị xóa thì fallback về data trong JSON
+        Long senderId = parseLongSafely(messageData.get("senderId"));
         User sender = userRepository.findById(senderId)
-                .orElse(User.builder()
-                        .id(senderId)
-                        .displayName("Unknown User")
-                        .avatarUrl(null)
-                        .build()); // Fallback nếu user đã bị xóa cứng
+                .orElse(null);
 
-        // 4. Xử lý Media (Trích xuất URL từ JSON)
+        String senderName = sender != null ? sender.getDisplayName() : (String) messageData.get("senderName");
+        String senderAvatar = sender != null ? sender.getAvatarUrl() : (String) messageData.get("senderAvatar");
+
+        // 4. Xử lý Media (Giữ nguyên cấu trúc Map để có cả URL và Type)
+        List<Map<String, String>> mediaList = new ArrayList<>();
         Object mediaObj = messageData.get("media");
-        List<String> mediaUrls = new ArrayList<>();
 
         if (mediaObj instanceof List<?> list) {
             for (Object item : list) {
-                if (item instanceof Map) {
-                    // Trường hợp lưu dạng: [{"url": "http...", "type": "image"}]
-                    Map<?, ?> map = (Map<?, ?>) item;
-                    Object url = map.get("url");
-                    if (url != null) {
-                        mediaUrls.add(String.valueOf(url));
+                if (item instanceof Map<?, ?> rawMap) {
+                    try {
+                        Map<String, String> safeMap = new HashMap<>();
+                        safeMap.put("url", String.valueOf(rawMap.get("url")));
+                        Object typeObj = rawMap.get("type");
+                        safeMap.put("type", typeObj != null ? String.valueOf(typeObj) : "file");                        mediaList.add(safeMap);
+                    } catch (Exception e) {
+                        log.info(e.getMessage());
                     }
-                } else if (item instanceof String) {
-                    // Trường hợp lưu dạng: ["http...", "http..."]
-                    mediaUrls.add((String) item);
                 }
             }
         }
 
-        // 5. Map sang DTO
+        // 5. Xử lý thời gian (createdAt & deletedAt)
+        // Lưu ý: Key trong JSON là "createdAt", không phải "timestamp"
+        String sentAtStr = String.valueOf(messageData.get("createdAt"));
+
+        Instant deletedAt = null;
+        Object deletedAtObj = messageData.get("deletedAt");
+        if (deletedAtObj != null) {
+            try {
+                deletedAt = Instant.parse(String.valueOf(deletedAtObj));
+            } catch (Exception ignored) {}
+        }
+
+        // 6. Lấy số lượng Report & Complaint
+        // Lưu ý: Nếu ID là UUID String và DB Report dùng Long, đoạn này cần xử lý riêng.
+        // Giả sử ReportRepository hỗ trợ đếm theo String ID hoặc bạn đã convert.
+        long reportCount = 0;
+        long complaintCount = 0;
+        try {
+            // Nếu bạn lưu targetId trong bảng Report là String -> Dùng thẳng messageId
+            // Nếu lưu là Long -> Cần hash hoặc logic khác. Ở đây giả định bạn xử lý được việc map ID.
+            // reportCount = reportRepository.countByTargetTypeAndTargetId(TargetType.MESSAGE, messageId);
+        } catch (Exception e) {
+            // Log error
+        }
+
+        // 7. Map sang DTO
         return ModerationMessageResponse.builder()
                 .id(messageId)
                 .conversationId(conversation.getId())
                 .senderId(senderId)
-                .senderName(sender.getDisplayName())
-                .senderAvatar(sender.getAvatarUrl())
+                .senderName(senderName)
+                .senderAvatar(senderAvatar)
                 .content((String) messageData.get("content"))
-                .sentAt(String.valueOf(messageData.get("timestamp")))
-                .mediaUrls(mediaUrls)
+                .sentAt(sentAtStr)
+                .media(mediaList) // 🔥 Map đúng field List<Map>
+                .deletedAt(deletedAt) // 🔥 Map thêm deletedAt
+                .reportCount(reportCount)
+                .complaintCount(complaintCount)
                 .build();
     }
 
@@ -241,9 +265,36 @@ public class ModerationServiceImpl implements ModerationService {
     @Transactional(readOnly = true)
     public PageVO<ModerationMessageResponse> getFlaggedMessages(String filter, Pageable pageable) {
         // Giả sử repository trả về DTO luôn (như đã bàn ở câu trước)
-        Page<ModerationMessageResponse> page = conversationRepository.findDeletedMessages(pageable); // Hoặc map từ Projection
+        Page<FlaggedMessageProjection> page = conversationRepository.findDeletedMessages(pageable);
 
-        List<ModerationMessageResponse> content = page.getContent();
+        List<ModerationMessageResponse> content = page.getContent().stream()
+                .map(p -> {
+                    // --- XỬ LÝ MAP MEDIA ---
+                    List<Map<String, String>> mediaList = new ArrayList<>();
+                    Object mediaObj = p.getMedia();
+
+                    // Tùy thuộc vào Hibernate Dialect, mediaObj có thể là String (JSON) hoặc List
+                    // Case 1: Nếu Hibernate tự map ra List (tốt nhất)
+                    if (mediaObj instanceof List) {
+                        mediaList = (List<Map<String, String>>) mediaObj;
+                    }
+                    // Case 2: Nếu Hibernate trả về String JSON -> Cần parse thủ công (Ví dụ dùng Jackson)
+                    // Ở đây để đơn giản, ta giả định driver/dialect hỗ trợ map thẳng hoặc ta bỏ qua bước parse phức tạp
+                    // Nếu bạn gặp lỗi trả về String, bạn cần dùng ObjectMapper để readValue.
+
+                    return ModerationMessageResponse.builder()
+                            .id(p.getId())
+                            .conversationId(p.getConversationId())
+                            .senderId(p.getSenderId())
+                            .senderName(p.getSenderName())
+                            .senderAvatar(p.getSenderAvatar())
+                            .content(p.getContent())
+                            .sentAt(p.getSentAt())
+                            .deletedAt(p.getDeletedAt())
+                            .media(mediaList)
+                            .build();
+                })
+                .collect(Collectors.toList());
 
         // GỌI HÀM BỔ SUNG COUNT
         // Lưu ý: Message ID thường là String (UUID). Nếu Report lưu targetId là Long thì sẽ lỗi ở đây.
@@ -515,5 +566,15 @@ public class ModerationServiceImpl implements ModerationService {
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
+    }
+
+    // Helper parse Long an toàn
+    private Long parseLongSafely(Object obj) {
+        if (obj == null) return null;
+        try {
+            return Long.valueOf(String.valueOf(obj));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

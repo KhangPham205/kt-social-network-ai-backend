@@ -1,5 +1,6 @@
 package com.kt.social.domain.message.repository;
 
+import com.kt.social.domain.moderation.dto.FlaggedMessageProjection;
 import com.kt.social.domain.moderation.dto.ModerationMessageResponse;
 import com.kt.social.domain.message.model.Conversation;
 import org.springframework.data.domain.Page;
@@ -56,12 +57,19 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
             msg ->> 'senderAvatar' as senderAvatar,
             msg ->> 'content' as content,
             msg ->> 'createdAt' as sentAt,
-            CAST(msg ->> 'deletedAt' AS TIMESTAMP) as deletedAt 
+            CAST(msg ->> 'deletedAt' AS TIMESTAMP) as deletedAt,
+            msg -> 'media' as media
+            
         FROM conversations c,
              jsonb_array_elements(c.messages) msg
         WHERE msg ->> 'deletedAt' IS NOT NULL 
+           OR (msg ->> 'isDeleted')::boolean = true
     """,
-            countQuery = "...", // Giữ nguyên count query
+            countQuery = """
+        SELECT count(*) 
+        FROM conversations c, jsonb_array_elements(c.messages) msg
+        WHERE msg ->> 'deletedAt' IS NOT NULL OR (msg ->> 'isDeleted')::boolean = true
+    """,
             nativeQuery = true)
-    Page<ModerationMessageResponse> findDeletedMessages(Pageable pageable);
+    Page<FlaggedMessageProjection> findDeletedMessages(Pageable pageable);
 }
