@@ -16,6 +16,7 @@ import com.kt.social.domain.admin.dto.AdminUserViewDto;
 import com.kt.social.domain.audit.service.ActivityLogService;
 import com.kt.social.domain.friendship.dto.FriendshipResponse;
 import com.kt.social.domain.friendship.enums.FriendshipStatus;
+import com.kt.social.domain.friendship.model.Friendship;
 import com.kt.social.domain.friendship.repository.FriendshipRepository;
 import com.kt.social.domain.user.dto.*;
 import com.kt.social.domain.user.mapper.UserMapper;
@@ -489,41 +490,51 @@ public class UserServiceImpl extends BaseFilterService<User, UserRelationDto> im
             return Map.of();
         }
 
-        // Lấy danh sách ID của các user mục tiêu
         Set<Long> targetIds = targets.stream().map(User::getId).collect(Collectors.toSet());
         Long viewerId = viewer.getId();
 
-        // Query 2: Lấy trạng thái following (Viewer đang follow ai trong list?)
+        // Query 2 & 3: Giữ nguyên logic Following/Follower
         Set<Long> followingIds = userRelaRepository.findFollowingIds(viewerId, targetIds);
-
-        // Query 3: Lấy trạng thái followed by (Ai trong list đang follow Viewer?)
         Set<Long> followedByIds = userRelaRepository.findFollowerIds(viewerId, targetIds);
 
-        // Query 4: Lấy trạng thái bạn bè
-        Map<Long, FriendshipResponse> friendshipMap = friendshipRepository
-                .findFriendshipsBetween(viewerId, targetIds)
-                .stream()
-                .map(f -> FriendshipResponse.from(f, viewerId)) // Cần 1 helper 'from'
-                .collect(Collectors.toMap(
-                        fr -> fr.getReceiverId().equals(viewerId) ? fr.getSenderId() : fr.getReceiverId(),
-                        fr -> fr
-                ));
+        // Query 4: SỬA LOGIC MAP
+        // Lấy List<Friendship> (Entity) thay vì DTO ngay lập tức
+        List<Friendship> friendships = friendshipRepository.findFriendshipsBetween(viewerId, targetIds);
 
-        // Bây giờ map trong bộ nhớ (cực nhanh, không tốn query)
+        // Map<TargetId, FriendshipResponse>
+        Map<Long, FriendshipResponse> friendshipMap = new HashMap<>();
+
+        for (Friendship f : friendships) {
+            Long senderId = f.getSender().getId();
+            Long receiverId = f.getReceiver().getId();
+
+            // Xác định ai là target (người kia) trong mối quan hệ này
+            // Nếu Viewer là Sender -> Target là Receiver
+            // Nếu Viewer là Receiver -> Target là Sender
+            Long targetIdKey = senderId.equals(viewerId) ? receiverId : senderId;
+
+            // Convert sang DTO và put vào Map với key là TargetId
+            friendshipMap.put(targetIdKey, FriendshipResponse.from(f, viewerId));
+        }
+
+        // Map kết quả cuối cùng
         return targets.stream().map(target -> {
             Long targetId = target.getId();
 
             boolean isFollowing = followingIds.contains(targetId);
             boolean isFollowedBy = followedByIds.contains(targetId);
 
-            // Lấy friendship, hoặc tạo rỗng nếu không có
-            FriendshipResponse friendship = friendshipMap.getOrDefault(targetId,
-                    FriendshipResponse.builder()
-                            .senderId(viewerId)
-                            .receiverId(targetId)
-                            .status(FriendshipStatus.NONE) // Cần enum 'NONE'
-                            .build()
-            );
+            // Lấy từ Map, nếu không có thì trả về trạng thái NONE
+            FriendshipResponse friendship = friendshipMap.get(targetId);
+
+            if (friendship == null) {
+                // Tạo object mặc định nếu chưa có quan hệ
+                friendship = FriendshipResponse.builder()
+                        .senderId(viewerId)
+                        .receiverId(targetId) // Lưu ý: receiver là target nếu là NONE (để mặc định mình gửi cho họ)
+                        .status(FriendshipStatus.NONE)
+                        .build();
+            }
 
             UserProfileDto base = userMapper.toDto(target);
 

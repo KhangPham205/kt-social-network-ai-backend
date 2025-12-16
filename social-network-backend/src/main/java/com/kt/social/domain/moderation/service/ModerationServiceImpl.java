@@ -248,7 +248,6 @@ public class ModerationServiceImpl implements ModerationService {
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getFlaggedComments(String filter, Pageable pageable) {
 
-        // 🔥 FIX: Không dùng findAll(spec) nữa
         Page<Comment> page;
 
         if (filter != null && !filter.isBlank()) {
