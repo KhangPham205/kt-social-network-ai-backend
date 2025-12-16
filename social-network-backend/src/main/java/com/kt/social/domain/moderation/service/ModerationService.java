@@ -8,6 +8,7 @@ import com.kt.social.domain.comment.dto.CommentResponse;
 import com.kt.social.domain.moderation.dto.ModerationLogResponse;
 import com.kt.social.domain.moderation.dto.UserModerationResponse;
 import com.kt.social.domain.post.dto.PostResponse;
+import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
 import org.springframework.data.domain.Page;
@@ -29,4 +30,7 @@ public interface ModerationService {
 
     void blockContent(Object id, TargetType type);
     void unblockContent(Long id, TargetType type);
+
+    void validatePostContent(Post post);
+    void validateImage(Long mediaId, byte[] imageBytes, String filename);
 }

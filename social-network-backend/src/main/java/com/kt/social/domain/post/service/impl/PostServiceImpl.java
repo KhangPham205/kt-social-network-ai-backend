@@ -87,7 +87,7 @@ public class PostServiceImpl implements PostService {
                 .isSystemBan(false)
                 .build();
 
-        Post savedPost = postRepository.save(post);
+        Post saved = postRepository.save(post);
 
 //        activityLogService.logActivity(
 //                author,
@@ -97,18 +97,19 @@ public class PostServiceImpl implements PostService {
 //                Map.of("accessScope", savedPost.getAccessModifier().toString())
 //        );
 
-        if (savedPost.getAccessModifier() != AccessScope.PRIVATE) {
-            postSyncService.syncPostToMilvus(savedPost.getId(), author.getId(), content);
+        if (saved.getAccessModifier() != AccessScope.PRIVATE) {
+            postSyncService.syncPostToMilvus(saved.getId(), author.getId(), content);
         }
 
         eventPublisher.publishEvent(new ContentCreatedEvent(
-                savedPost.getId(),
+                saved.getId(),
                 TargetType.POST,
-                savedPost.getContent(),
-                savedPost.getAuthor().getId()
+                saved.getContent(),
+                saved.getAuthor().getId(),
+                saved.getMedia()
         ));
 
-        PostResponse dto = postMapper.toDto(savedPost);
+        PostResponse dto = postMapper.toDto(saved);
         dto.setReactSummary(ReactSummaryDto.builder().build());
         dto.setShareCount(0);
         return dto;    }
@@ -161,7 +162,15 @@ public class PostServiceImpl implements PostService {
 
         post.setMedia(mediaList);
         post.setUpdatedAt(Instant.now());
-        Post savedPost = postRepository.save(post);
+        Post saved = postRepository.save(post);
+
+        eventPublisher.publishEvent(new ContentCreatedEvent(
+                saved.getId(),
+                TargetType.POST,
+                saved.getContent(),
+                saved.getAuthor().getId(),
+                saved.getMedia()
+        ));
 
 //        activityLogService.logActivity(
 //                currentUser,
@@ -171,7 +180,7 @@ public class PostServiceImpl implements PostService {
 //                Map.of("newAccessScope", savedPost.getAccessModifier().toString())
 //        );
 
-        return toDtoWithReactsAndShares(savedPost, currentUser.getId());
+        return toDtoWithReactsAndShares(saved, currentUser.getId());
     }
 
     @Override

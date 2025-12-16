@@ -51,6 +51,8 @@ public class Report {
 
     private String customReason; // Ghi chú thêm (nếu reason=OTHER)
 
+    private boolean isBannedBySystem = false;
+
     @CreationTimestamp
     @Column(updatable = false)
     private Instant createdAt;

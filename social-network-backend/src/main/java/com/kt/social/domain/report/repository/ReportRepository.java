@@ -41,4 +41,6 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
             "WHERE r.targetType = :type AND r.targetId IN :ids " +
             "GROUP BY r.targetId")
     List<IdCount> countByTargetTypeAndTargetIdIn(@Param("type") TargetType type, @Param("ids") List<Long> ids);
+
+    boolean existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(Long targetId, TargetType targetType);
 }

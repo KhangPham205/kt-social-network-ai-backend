@@ -93,7 +93,8 @@ public class CommentServiceImpl implements CommentService {
                 saved.getId(),
                 TargetType.COMMENT,
                 saved.getContent(),
-                saved.getAuthor().getId()
+                saved.getAuthor().getId(),
+                saved.getMedia()
         ));
 
         safeUpdateCommentCount(post.getId(), 1);
@@ -186,11 +187,13 @@ public class CommentServiceImpl implements CommentService {
         }
 
         Comment saved = commentRepository.save(comment);
+
         eventPublisher.publishEvent(new ContentCreatedEvent(
                 saved.getId(),
                 TargetType.COMMENT,
                 saved.getContent(),
-                saved.getAuthor().getId()
+                saved.getAuthor().getId(),
+                saved.getMedia()
         ));
 
 //        activityLogService.logActivity(

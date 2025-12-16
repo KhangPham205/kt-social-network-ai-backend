@@ -88,7 +88,7 @@ public class AiServiceClient {
                     // Lấy danh sách cờ vi phạm (flags) để làm lý do
                     JsonArray flags = json.getAsJsonArray("flags");
                     reason = "Vi phạm tiêu chuẩn cộng đồng: " + flags.toString();
-                    log.warn("🛡AI Moderation: Chặn nội dung. Reason: {}", reason);
+                    log.warn("AI Moderation: Chặn nội dung. Reason: {}", reason);
                 }
 
                 return new ModerationResult(isToxic, reason);
@@ -133,7 +133,7 @@ public class AiServiceClient {
                 String reason = json.get("reason").getAsString();
 
                 if (isToxic) {
-                    log.warn("🛡️ AI Image Check: Chặn ảnh {}. Lý do: {}", filename, reason);
+                    log.warn("AI Image Check: Chặn ảnh {}. Lý do: {}", filename, reason);
                 }
                 return new ModerationResult(isToxic, reason);
             }

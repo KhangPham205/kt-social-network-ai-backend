@@ -25,6 +25,7 @@ import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
+import com.kt.social.domain.report.enums.ReportReason;
 import com.kt.social.domain.report.mapper.ReportMapper;
 import com.kt.social.domain.report.model.Report;
 import com.kt.social.domain.report.repository.ComplaintRepository;
@@ -32,6 +33,7 @@ import com.kt.social.domain.report.repository.ReportRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
+import com.kt.social.infra.ai.AiServiceClient;
 import io.github.perplexhub.rsql.RSQLJPASupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +69,7 @@ public class ModerationServiceImpl implements ModerationService {
     private final CommentRepository commentRepository;
     private final PostMapper postMapper;
     private final CommentMapper commentMapper;
+    private final AiServiceClient aiServiceClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -452,6 +455,58 @@ public class ModerationServiceImpl implements ModerationService {
 
         // Ghi Log hành động
         saveLog(admin, targetType, String.valueOf(id), "UNBLOCK", "Admin restored content");
+    }
+
+    @Override
+    public void validatePostContent(Post post) {
+        // 1. Gọi AI kiểm tra
+        ModerationResult result = aiServiceClient.checkContentToxicity(post.getContent());
+
+        // 2. Nếu độc hại -> Tạo Report tự động
+        if (result.isToxic()) {
+            createSystemAutoReport(
+                    post.getId(),
+                    TargetType.POST,
+                    result.getReason()
+            );
+        }
+    }
+
+    @Override
+    public void validateImage(Long mediaId, byte[] imageBytes, String filename) {
+        ModerationResult result = aiServiceClient.checkImageToxicity(imageBytes, filename);
+
+        if (result.isToxic()) {
+            createSystemAutoReport(
+                    mediaId,
+                    TargetType.MEDIA,
+                    result.getReason()
+            );
+        }
+    }
+
+    private void createSystemAutoReport(Long targetId, TargetType targetType, String aiReason) {
+        try {
+            boolean exists = reportRepository.existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(targetId, targetType);
+            if (exists) return;
+
+            String systemNote = String.format("[SYSTEM AI DETECTED] Hệ thống tự động chặn. Lý do chi tiết: %s", aiReason);
+
+            Report report = Report.builder()
+                    .targetId(targetId)
+                    .targetType(targetType)
+                    .reporter(null)
+                    .reason(ReportReason.HARASSMENT)
+                    .isBannedBySystem(true)
+                    .createdAt(Instant.now())
+                    .build();
+
+            reportRepository.save(report);
+            log.info("🤖 Đã tạo System Report cho {} ID: {}", targetType, targetId);
+
+        } catch (Exception e) {
+            log.error("Lỗi khi tạo System Report: {}", e.getMessage());
+        }
     }
 
     // --- Helper ghi log ---

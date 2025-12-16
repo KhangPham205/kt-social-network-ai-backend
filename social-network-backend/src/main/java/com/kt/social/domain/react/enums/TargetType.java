@@ -4,5 +4,6 @@ public enum TargetType {
     POST,
     COMMENT,
     MESSAGE,
-    USER
+    USER,
+    MEDIA
 }
