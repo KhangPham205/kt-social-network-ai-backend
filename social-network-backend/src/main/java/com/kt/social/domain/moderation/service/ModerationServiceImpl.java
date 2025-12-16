@@ -35,6 +35,7 @@ import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.ai.AiServiceClient;
 import io.github.perplexhub.rsql.RSQLJPASupport;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -229,41 +230,38 @@ public class ModerationServiceImpl implements ModerationService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<PostResponse> getFlaggedPosts(String filter, Pageable pageable) {
-        // Query bài viết vi phạm
-        Specification<Post> spec = (root, query, cb) -> cb.or(
-                cb.isNotNull(root.get("deletedAt"))
-//                cb.isTrue(root.get("isSystemBan"))
-        );
-        Page<Post> page = postRepository.findAll(spec, pageable);
+        // 1. Tách từ khóa tìm kiếm (nếu filter dạng content=='abc')
+        String keyword = extractKeyword(filter);
 
-        // Convert sang DTO
+        // 2. Gọi Repository lấy TẤT CẢ (Đã xóa OR Có Report)
+        Page<Post> page = postRepository.findAllFlaggedPosts(keyword, pageable);
+
+        // 3. Map sang DTO
         List<PostResponse> content = page.getContent().stream()
                 .map(postMapper::toDto)
                 .toList();
 
+        // 4. Điền số lượng report/complaint
         enrichWithCounts(content, PostResponse::getId, PostResponse::setReportCount, PostResponse::setComplaintCount, TargetType.POST);
 
         return buildPageVO(page, content);
     }
 
-    // --- 2. COMMENT ---
     @Override
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getFlaggedComments(String filter, Pageable pageable) {
+        // 1. Tách từ khóa
+        String keyword = extractKeyword(filter);
 
-        Page<Comment> page;
+        // 2. Gọi Repository
+        Page<Comment> page = commentRepository.findAllFlaggedComments(keyword, pageable);
 
-        if (filter != null && !filter.isBlank()) {
-            page = commentRepository.findDeletedCommentsWithFilter(filter, pageable);
-        } else {
-            page = commentRepository.findDeletedComments(pageable);
-        }
-
+        // 3. Map sang DTO
         List<CommentResponse> content = page.getContent().stream()
                 .map(commentMapper::toDto)
                 .toList();
 
-        // Gọi hàm bổ sung count (giữ nguyên logic của bạn)
+        // 4. Điền số lượng
         enrichWithCounts(content, CommentResponse::getId, CommentResponse::setReportCount, CommentResponse::setComplaintCount, TargetType.COMMENT);
 
         return buildPageVO(page, content);
@@ -637,5 +635,17 @@ public class ModerationServiceImpl implements ModerationService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    // Hàm helper nhỏ để xử lý chuỗi filter (giữ lại từ code cũ nếu cần)
+    private String extractKeyword(String filter) {
+        if (filter != null && filter.contains("content=='")) {
+            try {
+                return filter.split("content=='")[1].split("'")[0];
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return filter; // Trả về nguyên gốc nếu client gửi string thường
     }
 }

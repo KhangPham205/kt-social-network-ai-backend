@@ -52,4 +52,10 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     @Query(value = "SELECT * FROM posts WHERE id = :id", nativeQuery = true)
     Optional<Post> findByIdIncludingDeleted(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT p FROM Post p " +
+            "LEFT JOIN Report r ON p.id = r.targetId AND r.targetType = 'POST' " +
+            "WHERE (p.deletedAt IS NOT NULL OR r.id IS NOT NULL) " +
+            "AND (:filter IS NULL OR p.content LIKE %:filter%)")
+    Page<Post> findAllFlaggedPosts(@Param("filter") String filter, Pageable pageable);
 }
