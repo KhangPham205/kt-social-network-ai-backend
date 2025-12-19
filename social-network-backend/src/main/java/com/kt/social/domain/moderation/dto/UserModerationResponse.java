@@ -13,7 +13,7 @@ public class UserModerationResponse {
     private String displayName;
     private String avatar;
     private boolean isLocked;
-    private long reportCount;
+    private long violationCount;
 
     // Constructor khớp với thứ tự trong @Query
     public UserModerationResponse(Long userId,
@@ -22,13 +22,13 @@ public class UserModerationResponse {
                                   String displayName,
                                   String avatar,
                                   AccountStatus status,
-                                  Long reportCount) { // JPA trả về Long (Wrapper), Hibernate tự unbox
+                                  Long violationCount) {
         this.userId = userId;
         this.username = username;
         this.email = email;
         this.displayName = displayName;
         this.avatar = avatar;
         this.isLocked = (status == AccountStatus.BLOCKED);
-        this.reportCount = reportCount != null ? reportCount : 0L;
+        this.violationCount = violationCount != null ? violationCount : 0L;
     }
 }
