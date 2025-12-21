@@ -1,6 +1,6 @@
 package com.kt.social.common.dto;
 
 public interface IdCount {
-    Long getId();
+    String getId();
     Long getCount();
 }

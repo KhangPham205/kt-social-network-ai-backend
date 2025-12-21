@@ -527,13 +527,13 @@ public class ModerationServiceImpl implements ModerationService {
 
     private void createSystemAutoReport(Long targetId, TargetType targetType, String aiReason) {
         try {
-            boolean exists = reportRepository.existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(targetId, targetType);
+            boolean exists = reportRepository.existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(targetId.toString(), targetType);
             if (exists) return;
 
 //            String systemNote = String.format("[SYSTEM AI DETECTED] Hệ thống tự động chặn. Lý do chi tiết: %s", aiReason);
 
             Report report = Report.builder()
-                    .targetId(targetId)
+                    .targetId(targetId.toString())
                     .targetType(targetType)
                     .reporter(null)
                     .reason(ReportReason.HARASSMENT)
@@ -561,65 +561,6 @@ public class ModerationServiceImpl implements ModerationService {
                 .build());
     }
 
-//    @Override
-//    @Transactional
-//    public void unblock(Long id, TargetType targetType) {
-//        User admin = userService.getCurrentUser();
-//
-//        // 1. Khôi phục nội dung (Post/Comment)
-//        if (targetType == TargetType.POST) {
-//            // Lưu ý: Cần dùng hàm find riêng để tìm được cả bài đã bị soft-delete
-//            Post post = postRepository.findByIdIncludingDeleted(id)
-//                    .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-//
-//            post.setDeletedAt(null);
-//            post.setSystemBan(false);
-//            post.setViolationDetails(null); // Xóa lý do vi phạm cũ (tuỳ chọn)
-//            postRepository.save(post);
-//
-//        } else if (targetType == TargetType.COMMENT) {
-//            Comment comment = commentRepository.findByIdIncludingDeleted(id)
-//                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
-//
-//            comment.setDeletedAt(null);
-//            // comment.setSystemBan(false); // Nếu comment có field này
-//            commentRepository.save(comment);
-//        }
-//
-//        // Tìm tất cả các report ĐÃ DUYỆT (APPROVED) liên quan đến nội dung này
-//        List<Report> relatedReports = reportRepository.findAllByTargetTypeAndTargetIdAndStatus(
-//                targetType, id, ReportStatus.APPROVED
-//        );
-//
-//        if (!relatedReports.isEmpty()) {
-//            for (Report report : relatedReports) {
-//                // Ghi lại lịch sử thay đổi của Report
-//                report.getHistory().add(Report.ReportHistory.builder()
-//                        .actorId(admin.getId())
-//                        .actorName(admin.getDisplayName())
-//                        .oldStatus(ReportStatus.APPROVED)
-//                        .newStatus(ReportStatus.REJECTED)
-//                        .note("System: Tự động từ chối do Admin đã khôi phục nội dung gốc.")
-//                        .timestamp(Instant.now())
-//                        .build());
-//
-//                // Đổi trạng thái thành REJECTED (Coi như báo cáo sai/không còn hiệu lực)
-//                report.setStatus(ReportStatus.REJECTED);
-//            }
-//            reportRepository.saveAll(relatedReports);
-//        }
-//
-//        // 3. Ghi Log Moderation (Admin Action)
-//        moderationLogRepository.save(ModerationLog.builder()
-//                .targetType(targetType)
-//                .targetId(id)
-//                .action("ADMIN_RESTORE")
-//                .actor(admin)
-//                .reason("Admin restored content manually")
-//                .createdAt(Instant.now())
-//                .build());
-//    }
-
     // Helper map entity -> dto
     private ModerationLogResponse mapLogToResponse(ModerationLog log) {
         return ModerationLogResponse.builder()
@@ -646,24 +587,57 @@ public class ModerationServiceImpl implements ModerationService {
                 .build();
     }
 
-    private <T> void enrichWithCounts(List<T> responses, Function<T, Long> idExtractor, BiConsumer<T, Long> setReport, BiConsumer<T, Long> setComplaint, TargetType type) {
+    /**
+     * Hàm helper chung để điền số lượng Report và Complaint
+     */
+    private <T> void enrichWithCounts(
+            List<T> responses,
+            Function<T, Object> idExtractor, // Nhận Object (Long hoặc String)
+            BiConsumer<T, Long> setReport,
+            BiConsumer<T, Long> setComplaint,
+            TargetType type
+    ) {
         if (responses.isEmpty()) return;
 
-        // 1. Lấy danh sách ID
-        List<Long> ids = responses.stream().map(idExtractor).toList();
+        // 1. Convert tất cả ID sang List<String> để query
+        List<String> ids = responses.stream()
+                .map(idExtractor)
+                .map(String::valueOf)
+                .toList();
 
-        // 2. Query Database (Chỉ tốn 2 query cho cả trang dữ liệu)
-        Map<Long, Long> reportCounts = reportRepository.countByTargetTypeAndTargetIdIn(type, ids)
-                .stream().collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+        // 2. Lấy Report Count
+        Map<String, Long> reportCounts = new HashMap<>();
+        try {
+            reportRepository.countByTargetTypeAndTargetIdIn(type, ids)
+                    .forEach(item -> {
+                        String key = String.valueOf(item.getId());
+                        reportCounts.put(key, item.getCount());
+                    });
+        } catch (Exception e) {
+            log.error("Lỗi khi lấy Report Count: {}", e.getMessage());
+        }
 
-        Map<Long, Long> complaintCounts = complaintRepository.countByTargetTypeAndTargetIdIn(type, ids)
-                .stream().collect(Collectors.toMap(IdCount::getId, IdCount::getCount));
+        // 3. Lấy Complaint Count (Xử lý an toàn nếu chưa implement)
+        Map<String, Long> complaintCounts = new HashMap<>();
+        if (complaintRepository != null) { // Check null safety
+            try {
+                complaintRepository.countByTargetTypeAndTargetIdIn(type, ids)
+                        .forEach(item -> {
+                            String key = String.valueOf(item.getId());
+                            complaintCounts.put(key, item.getCount());
+                        });
+            } catch (Exception e) {
+                // Log warning thôi, không làm crash app nếu Complaint lỗi
+                log.warn("Lỗi khi lấy Complaint Count (Có thể chưa update Repo): {}", e.getMessage());
+            }
+        }
 
-        // 3. Gán dữ liệu vào DTO
+        // 4. Gán dữ liệu ngược lại vào DTO
         for (T res : responses) {
-            Long id = idExtractor.apply(res);
-            setReport.accept(res, reportCounts.getOrDefault(id, 0L));
-            setComplaint.accept(res, complaintCounts.getOrDefault(id, 0L));
+            String idStr = String.valueOf(idExtractor.apply(res));
+
+            setReport.accept(res, reportCounts.getOrDefault(idStr, 0L));
+            setComplaint.accept(res, complaintCounts.getOrDefault(idStr, 0L)); // An toàn vì map đã khởi tạo
         }
     }
 

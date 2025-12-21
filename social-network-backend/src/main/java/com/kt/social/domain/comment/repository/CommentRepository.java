@@ -45,10 +45,19 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     @Query("SELECT c FROM Comment c WHERE c.deletedAt IS NOT NULL AND c.content LIKE %:filter%")
     Page<Comment> findDeletedCommentsWithFilter(@Param("filter") String filter, Pageable pageable);
 
-    @Query("SELECT DISTINCT c FROM Comment c " +
-            "LEFT JOIN Report r ON c.id = r.targetId AND r.targetType = 'COMMENT' " +
-            "WHERE (c.deletedAt IS NOT NULL OR r.id IS NOT NULL) " +
-            "AND (:filter IS NULL OR c.content LIKE %:filter%)")
+    @Query(value = """
+        SELECT DISTINCT c.* FROM comment c
+        LEFT JOIN reports r ON (r.target_id = CAST(c.id AS VARCHAR) AND r.target_type = 'COMMENT')
+        WHERE (c.deleted_at IS NOT NULL OR r.id IS NOT NULL)
+        AND (:filter IS NULL OR c.content ILIKE %:filter%)
+        """,
+            countQuery = """
+        SELECT count(DISTINCT c.id) FROM comment c
+        LEFT JOIN reports r ON (r.target_id = CAST(c.id AS VARCHAR) AND r.target_type = 'COMMENT')
+        WHERE (c.deleted_at IS NOT NULL OR r.id IS NOT NULL)
+        AND (:filter IS NULL OR c.content ILIKE %:filter%)
+        """,
+            nativeQuery = true)
     Page<Comment> findAllFlaggedComments(@Param("filter") String filter, Pageable pageable);
 
     Page<Comment> findAll(Specification<Comment> spec, Pageable pageable);

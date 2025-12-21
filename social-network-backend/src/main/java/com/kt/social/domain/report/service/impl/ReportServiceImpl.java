@@ -50,7 +50,7 @@ public class ReportServiceImpl implements ReportService {
         User reporter = userRepository.findById(reporterId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reporter not found"));
 
-        if (reportRepository.existsByReporterIdAndTargetTypeAndTargetId(reporterId, request.getTargetType(), request.getTargetId())) {
+        if (reportRepository.existsByReporterIdAndTargetTypeAndTargetId(reporterId, request.getTargetType(), request.getTargetId().toString())) {
             throw new BadRequestException("Bạn đã báo cáo nội dung này rồi.");
         }
 
@@ -77,7 +77,7 @@ public class ReportServiceImpl implements ReportService {
         Report report = Report.builder()
                 .reporter(reporter)
                 .targetType(request.getTargetType())
-                .targetId(request.getTargetId())
+                .targetId(request.getTargetId().toString())
                 .targetUserId(targetOwnerId)
                 .reason(request.getReason())
                 .customReason(request.getReason().name().equals("OTHER") ? request.getCustomReason() : null) // Nếu reason là OTHER
@@ -192,7 +192,7 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<ReportResponse> getReportsByContent(Long targetId, TargetType targetType, Pageable pageable) {
-        Page<Report> page = reportRepository.findByTargetTypeAndTargetId(targetType, targetId, pageable);
+        Page<Report> page = reportRepository.findByTargetTypeAndTargetId(targetType, targetId.toString(), pageable);
 
         List<ReportResponse> content = page.getContent().stream()
                 .map(reportMapper::toResponse)

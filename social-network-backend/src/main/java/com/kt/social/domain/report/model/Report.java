@@ -38,7 +38,7 @@ public class Report {
     private TargetType targetType; // Loại bị báo cáo (POST, COMMENT, MESSAGE)
 
     @Column(nullable = false)
-    private Long targetId; // ID của post/comment/user bị báo cáo
+    private String targetId; // ID của post/comment/user bị báo cáo
 
     @Column(name = "target_user_id", nullable = false)
     private Long targetUserId;

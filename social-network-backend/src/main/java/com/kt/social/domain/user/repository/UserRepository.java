@@ -42,4 +42,16 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             @Param("keyword") String keyword,
             Pageable pageable
     );
+
+    @Query(value = "SELECT COUNT(*) FROM users WHERE is_active = true", nativeQuery = true)
+    long countActiveUsers();
+
+    @Query(value = """
+    SELECT to_char(created_at, 'YYYY-MM-DD') as date, COUNT(*) 
+    FROM users 
+    WHERE created_at >= NOW() - INTERVAL '7 days'
+    GROUP BY date 
+    ORDER BY date
+""", nativeQuery = true)
+    List<Object[]> countNewUsersLast7Days();
 }

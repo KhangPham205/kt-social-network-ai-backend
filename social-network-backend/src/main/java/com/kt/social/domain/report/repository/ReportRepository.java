@@ -17,30 +17,20 @@ import java.util.List;
 @Repository
 public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecificationExecutor<Report> {
 
-    boolean existsByReporterIdAndTargetTypeAndTargetId(Long reporterId, TargetType targetType, Long targetId);
-
-    @Query("SELECT r FROM Report r WHERE (" +
-            "(r.targetType = 'USER' AND r.targetId = :userId) OR " +
-            "(r.targetType = 'POST' AND r.targetId IN (SELECT p.id FROM Post p WHERE p.author.id = :userId)) OR " +
-            "(r.targetType = 'COMMENT' AND r.targetId IN (SELECT c.id FROM Comment c WHERE c.author.id = :userId))" +
-            ") ORDER BY r.createdAt DESC")
-    Page<Report> findAllViolationsByUserId(
-            @Param("userId") Long userId,
-            @Param("status") ReportStatus status,
-            Pageable pageable
-    );
+    boolean existsByReporterIdAndTargetTypeAndTargetId(Long reporterId, TargetType targetType, String targetId);
 
     long countByTargetUserId(Long userId);
 
     Page<Report> findByTargetUserId(Long userId, Pageable pageable);
 
-    Page<Report> findByTargetTypeAndTargetId(TargetType targetType, Long targetId, Pageable pageable);
+    Page<Report> findByTargetTypeAndTargetId(TargetType targetType, String targetId, Pageable pageable);
 
-    @Query("SELECT r.targetId as id, COUNT(r) as count " +
-            "FROM Report r " +
+    @Query("SELECT r.targetId AS id, COUNT(r) AS count FROM Report r " +
             "WHERE r.targetType = :type AND r.targetId IN :ids " +
             "GROUP BY r.targetId")
-    List<IdCount> countByTargetTypeAndTargetIdIn(@Param("type") TargetType type, @Param("ids") List<Long> ids);
+    List<IdCount> countByTargetTypeAndTargetIdIn(@Param("type") TargetType type, @Param("ids") List<String> ids);
 
-    boolean existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(Long targetId, TargetType targetType);
+    boolean existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(String targetId, TargetType targetType);
+
+    long countByStatus(ReportStatus status);
 }

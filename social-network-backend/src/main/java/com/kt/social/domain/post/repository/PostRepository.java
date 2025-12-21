@@ -53,9 +53,18 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     @Query(value = "SELECT * FROM posts WHERE id = :id", nativeQuery = true)
     Optional<Post> findByIdIncludingDeleted(@Param("id") Long id);
 
-    @Query("SELECT DISTINCT p FROM Post p " +
-            "LEFT JOIN Report r ON p.id = r.targetId AND r.targetType = 'POST' " +
-            "WHERE (p.deletedAt IS NOT NULL OR r.id IS NOT NULL) " +
-            "AND (:filter IS NULL OR p.content LIKE %:filter%)")
+    @Query(value = """
+        SELECT DISTINCT p.* FROM posts p
+        LEFT JOIN reports r ON (r.target_id = CAST(p.id AS VARCHAR) AND r.target_type = 'POST')
+        WHERE (p.deleted_at IS NOT NULL OR p.is_system_ban = true OR r.id IS NOT NULL)
+        AND (:filter IS NULL OR p.content ILIKE %:filter%)
+        """,
+            countQuery = """
+        SELECT count(DISTINCT p.id) FROM posts p
+        LEFT JOIN reports r ON (r.target_id = CAST(p.id AS VARCHAR) AND r.target_type = 'POST')
+        WHERE (p.deleted_at IS NOT NULL OR p.system_ban = true OR r.id IS NOT NULL)
+        AND (:filter IS NULL OR p.content ILIKE %:filter%)
+        """,
+            nativeQuery = true)
     Page<Post> findAllFlaggedPosts(@Param("filter") String filter, Pageable pageable);
 }

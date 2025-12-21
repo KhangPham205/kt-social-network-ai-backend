@@ -25,6 +25,14 @@ import java.util.Map;
 @Slf4j
 public class AiServiceClient {
 
+    // Bản đồ chuyển đổi nhãn từ AI sang tiếng Việt
+    private static final Map<String, String> LABEL_MAPPING = Map.of(
+            "LABEL_0", "Ngôn từ độc hại (Toxic)",
+            "LABEL_1", "Ngôn từ thù ghét (Hate Speech)",
+            "LABEL_2", "Xúc phạm (Insult)",
+            "THREAT", "Đe dọa (Threat)"
+    );
+
     private final RestTemplate restTemplate = new RestTemplate();
     private final Gson gson = new Gson();
 
@@ -85,9 +93,17 @@ public class AiServiceClient {
                 String reason = null;
 
                 if (isToxic) {
-                    // Lấy danh sách cờ vi phạm (flags) để làm lý do
                     JsonArray flags = json.getAsJsonArray("flags");
-                    reason = "Vi phạm tiêu chuẩn cộng đồng: " + flags.toString();
+
+                    // Chuyển ["LABEL_1", "LABEL_0"] thành "Ngôn từ thù ghét, Ngôn từ độc hại"
+                    List<String> readableReasons = new ArrayList<>();
+                    for (int i = 0; i < flags.size(); i++) {
+                        String rawLabel = flags.get(i).getAsString();
+                        readableReasons.add(LABEL_MAPPING.getOrDefault(rawLabel, rawLabel));
+                    }
+
+                    reason = String.join(", ", readableReasons);
+
                     log.warn("AI Moderation: Chặn nội dung. Reason: {}", reason);
                 }
 
@@ -132,8 +148,8 @@ public class AiServiceClient {
                 boolean isToxic = json.get("is_toxic").getAsBoolean();
                 String reason = json.get("reason").getAsString();
 
-                if (isToxic) {
-                    log.warn("AI Image Check: Chặn ảnh {}. Lý do: {}", filename, reason);
+                if ("nsfw".equalsIgnoreCase(reason)) {
+                    reason = "Hình ảnh nhạy cảm (NSFW)";
                 }
                 return new ModerationResult(isToxic, reason);
             }

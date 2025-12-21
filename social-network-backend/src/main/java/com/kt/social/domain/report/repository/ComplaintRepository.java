@@ -25,5 +25,5 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long>, Jpa
             "FROM Complaint c " +
             "WHERE c.targetType = :type AND c.targetId IN :ids " +
             "GROUP BY c.targetId")
-    List<IdCount> countByTargetTypeAndTargetIdIn(@Param("type") TargetType type, @Param("ids") List<Long> ids);
+    List<IdCount> countByTargetTypeAndTargetIdIn(@Param("type") TargetType type, @Param("ids") List<String> ids);
 }

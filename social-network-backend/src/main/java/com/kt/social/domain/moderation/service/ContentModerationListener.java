@@ -167,10 +167,10 @@ public class ContentModerationListener {
      */
     private void createSystemReportForPostOrComment(Long targetId, TargetType type, String reason) {
         try {
-            boolean exists = reportRepository.existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(targetId, type);
+            boolean exists = reportRepository.existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(targetId.toString(), type);
             if (!exists) {
                 Report report = Report.builder()
-                        .targetId(targetId)
+                        .targetId(targetId.toString())
                         .targetType(type)
                         .reason(ReportReason.HARASSMENT)
                         .isBannedBySystem(true)
