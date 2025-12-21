@@ -24,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -72,13 +73,22 @@ public class ModerationController {
      * Hỗ trợ filter: action, targetType, actorName, etc.
      * Ví dụ: /api/v1/moderation/logs?filter=action=='AUTO_BAN';type=='POST'&page=0&size=20
      */
-    @GetMapping("/logs")
+    @GetMapping("/history")
     @PreAuthorize("hasAuthority('MODERATION:ACCESS')") // Cả Admin và Mod đều xem được
     public ResponseEntity<PageVO<ModerationLogResponse>> getModerationLogs(
             @RequestParam(required = false) String filter,
             @ParameterObject Pageable pageable
     ) {
         return ResponseEntity.ok(moderationService.getModerationLogs(filter, pageable));
+    }
+
+    @GetMapping("/{type}/{id}/history")
+    @PreAuthorize("hasAnyAuthority('MODERATION:ACCESS')")
+    public ResponseEntity<List<ModerationLogResponse>> getModerationHistory(
+            @PathVariable TargetType type,
+            @PathVariable String id
+    ) {
+        return ResponseEntity.ok(moderationService.getHistory(type, id));
     }
 
     /**

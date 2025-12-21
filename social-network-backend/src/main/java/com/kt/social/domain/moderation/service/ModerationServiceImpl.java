@@ -375,6 +375,15 @@ public class ModerationServiceImpl implements ModerationService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ModerationLogResponse> getHistory(TargetType type, String id) {
+        List<ModerationLog> logs = moderationLogRepository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(type, id);
+        return logs.stream()
+                .map(this::mapToDto)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public void updateUserStatus(Long targetUserId, AccountStatus newStatus, String reason) {
         User currentUser = userService.getCurrentUser();
@@ -624,6 +633,16 @@ public class ModerationServiceImpl implements ModerationService {
                 .actorId(log.getActor() != null ? log.getActor().getId() : null)
                 .actorName(log.getActor() != null ? log.getActor().getDisplayName() : "System (AI)")
                 .actorAvatar(log.getActor() != null ? log.getActor().getAvatarUrl() : null)
+                .build();
+    }
+
+    private ModerationLogResponse mapToDto(ModerationLog log) {
+        return ModerationLogResponse.builder()
+                .id(log.getId())
+                .action(log.getAction()) // BLOCK / UNBLOCK / AUTO_BAN
+                .reason(log.getReason())
+                .actorName(log.getActor() != null ? log.getActor().getDisplayName() : "System (AI)")
+                .createdAt(log.getCreatedAt())
                 .build();
     }
 

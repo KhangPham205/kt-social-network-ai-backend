@@ -4,12 +4,15 @@ import com.kt.social.auth.enums.AccountStatus;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.moderation.dto.*;
 import com.kt.social.domain.comment.dto.CommentResponse;
+import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.post.dto.PostResponse;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.ReportResponse;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 public interface ModerationService {
     ModerationUserDetailResponse getUserDetailForAdmin(Long userId);
@@ -22,6 +25,7 @@ public interface ModerationService {
     PageVO<GroupedFlaggedMessageResponse> getGroupedFlaggedMessages(Pageable pageable);
     @Transactional(readOnly = true)
     PageVO<ModerationLogResponse> getModerationLogs(String filter, Pageable pageable);
+    List<ModerationLogResponse> getHistory(TargetType type, String id);
 
     void updateUserStatus(Long userId, AccountStatus newStatus, String reason);
 
