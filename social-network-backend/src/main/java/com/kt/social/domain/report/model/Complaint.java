@@ -2,6 +2,7 @@ package com.kt.social.domain.report.model;
 
 import com.kt.social.common.entity.BaseEntity;
 import com.kt.social.domain.react.enums.TargetType; // Nhớ import Enum này
+import com.kt.social.domain.report.enums.ComplaintStatus;
 import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -16,6 +17,9 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Complaint extends BaseEntity {
+
+    @Column(name = "status")
+    private ComplaintStatus status;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

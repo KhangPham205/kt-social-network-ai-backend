@@ -2,6 +2,7 @@ package com.kt.social.domain.report.model;
 
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.enums.ReportReason;
+import com.kt.social.domain.report.enums.ReportStatus;
 import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -28,6 +29,9 @@ public class Report {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reporter_id", nullable = false)
     private User reporter; // Người báo cáo
+
+    @Column(name = "status")
+    private ReportStatus status;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

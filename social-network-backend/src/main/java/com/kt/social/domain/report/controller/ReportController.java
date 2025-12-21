@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping(ApiConstants.REPORTS)
 @RequiredArgsConstructor
@@ -26,6 +28,12 @@ public class ReportController {
     public ResponseEntity<ReportResponse> createReport(@RequestBody CreateReportRequest request) {
         Long currentUserId = userService.getCurrentUser().getId();
         return ResponseEntity.ok(reportService.createReport(currentUserId, request));
+    }
+
+    @PutMapping
+    @PreAuthorize("hasAuthority('REPORT:PROCESS')")
+    public ResponseEntity<List<ReportResponse>> updateReport(@RequestBody UpdateReportRequest request) {
+        return ResponseEntity.ok(reportService.updateReport(request));
     }
 
     @GetMapping("/{reportId}")
@@ -43,14 +51,4 @@ public class ReportController {
     ) {
         return ResponseEntity.ok(reportService.getReports(filter, pageable));
     }
-
-//    // 3. Admin xử lý report
-//    @PutMapping("/{id}/process")
-//    @PreAuthorize("hasAuthority('REPORT:PROCESS')")
-//    public ResponseEntity<ReportResponse> processReport(
-//            @PathVariable Long id,
-//            @RequestBody ProcessReportRequest request
-//    ) {
-//        return ResponseEntity.ok(reportService.processReport(id, request));
-//    }
 }

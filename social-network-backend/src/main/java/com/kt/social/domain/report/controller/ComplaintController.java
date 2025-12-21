@@ -3,6 +3,7 @@ package com.kt.social.domain.report.controller;
 import com.kt.social.common.constants.ApiConstants;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.report.dto.*;
+import com.kt.social.domain.report.enums.ComplaintStatus;
 import com.kt.social.domain.report.service.ReportService;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
@@ -25,6 +26,15 @@ public class ComplaintController {
     @PreAuthorize("hasAuthority('COMPLAINT:CREATE')")
     public ResponseEntity<ComplaintResponse> createComplaint(@RequestBody CreateComplaintRequest request) {
         return ResponseEntity.ok(reportService.createComplaint(request));
+    }
+
+    @PutMapping("{id}")
+    @PreAuthorize("hasAuthority('COMPLAINT:PROCESS')")
+    public ResponseEntity<ComplaintResponse> updateComplaint(
+            @PathVariable Long id,
+            @RequestParam ComplaintStatus status
+    ){
+        return ResponseEntity.ok(reportService.updateComplaint(id, status));
     }
 
     /**

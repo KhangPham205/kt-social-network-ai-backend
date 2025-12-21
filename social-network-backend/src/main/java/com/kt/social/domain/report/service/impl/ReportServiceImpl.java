@@ -9,6 +9,7 @@ import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.dto.*;
+import com.kt.social.domain.report.enums.ComplaintStatus;
 import com.kt.social.domain.report.mapper.ReportMapper;
 import com.kt.social.domain.report.model.Complaint;
 import com.kt.social.domain.report.model.Report;
@@ -83,6 +84,29 @@ public class ReportServiceImpl implements ReportService {
                 .build();
 
         return reportMapper.toResponse(reportRepository.save(report));
+    }
+
+    @Override
+    public List<ReportResponse> updateReport(UpdateReportRequest request) {
+        List<Report> reports = reportRepository.findAllById(request.getReportIds());
+
+        if (reports.isEmpty()) {
+            throw new ResourceNotFoundException("No reports found for the provided IDs");
+        }
+
+        if (request.getReportStatus() == null) {
+            throw new BadRequestException("Report status must be provided for update");
+        }
+
+        for (Report report : reports) {
+            report.setStatus(request.getReportStatus());
+        }
+
+        List<Report> updatedReports = reportRepository.saveAll(reports);
+
+        return updatedReports.stream()
+                .map(reportMapper::toResponse)
+                .toList();
     }
 
     @Override
@@ -223,6 +247,20 @@ public class ReportServiceImpl implements ReportService {
                 .targetId(request.getTargetId())
                 .content(request.getReason())
                 .build();
+
+        return reportMapper.toResponse(complaintRepository.save(complaint));
+    }
+
+    @Override
+    public ComplaintResponse updateComplaint(Long id, ComplaintStatus status) {
+        Complaint complaint = complaintRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Complaint not found"));
+
+        if (complaint.getStatus() == null || complaint.getStatus() != ComplaintStatus.PENDING) {
+            throw new BadRequestException("Only PENDING complaints can be updated.");
+        }
+
+        complaint.setStatus(status);
 
         return reportMapper.toResponse(complaintRepository.save(complaint));
     }
