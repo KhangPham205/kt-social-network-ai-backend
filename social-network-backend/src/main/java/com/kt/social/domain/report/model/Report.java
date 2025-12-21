@@ -2,7 +2,6 @@ package com.kt.social.domain.report.model;
 
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.enums.ReportReason;
-import com.kt.social.domain.report.enums.ReportStatus;
 import com.kt.social.domain.user.model.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -10,13 +9,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
-import java.io.Serializable;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "reports")

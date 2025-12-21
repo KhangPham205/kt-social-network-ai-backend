@@ -49,27 +49,53 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     );
 
     @Query(value = """
-        SELECT 
-            CAST(msg ->> 'id' AS TEXT) as id,
-            c.id as conversationId,
-            CAST(msg ->> 'senderId' AS BIGINT) as senderId,
-            msg ->> 'senderName' as senderName,
-            msg ->> 'senderAvatar' as senderAvatar,
-            msg ->> 'content' as content,
-            msg ->> 'createdAt' as sentAt,
-            CAST(msg ->> 'deletedAt' AS TIMESTAMP) as deletedAt,
-            msg -> 'media' as media
-            
-        FROM conversations c,
-             jsonb_array_elements(c.messages) msg
-        WHERE msg ->> 'deletedAt' IS NOT NULL 
-           OR (msg ->> 'isDeleted')::boolean = true
-    """,
+    SELECT 
+        CAST(msg ->> 'id' AS TEXT) as id,
+        CAST(c.id AS BIGINT) as conversationId,  -- Sửa lại cast cho đúng
+        c.title as conversationTitle,           -- Lấy thêm title để admin biết nhóm nào
+        CAST(c.is_group AS BOOLEAN) as isGroup, -- Biết là chat 1-1 hay group
+        CAST(msg ->> 'senderId' AS BIGINT) as senderId,
+        msg ->> 'senderName' as senderName,
+        msg ->> 'senderAvatar' as senderAvatar,
+        msg ->> 'content' as content,
+        msg ->> 'createdAt' as sentAt,
+        CAST(msg ->> 'deletedAt' AS TIMESTAMP) as deletedAt,
+        msg -> 'media' as media
+        
+    FROM conversations c,
+         jsonb_array_elements(c.messages) msg
+    WHERE (msg ->> 'deletedAt' IS NOT NULL)
+       -- Admin thường muốn xem cả tin bị User xóa VÀ tin bị System Ban
+       -- Nếu chỉ muốn xem tin bị SYSTEM BLOCK thì cần thêm field 'isSystemBan' trong JSON message
+    ORDER BY CAST(msg ->> 'createdAt' AS TIMESTAMP) DESC -- Sort mới nhất
+""",
             countQuery = """
-        SELECT count(*) 
-        FROM conversations c, jsonb_array_elements(c.messages) msg
-        WHERE msg ->> 'deletedAt' IS NOT NULL OR (msg ->> 'isDeleted')::boolean = true
-    """,
+    SELECT count(*)
+    FROM conversations c, jsonb_array_elements(c.messages) msg
+    WHERE (msg ->> 'deletedAt' IS NOT NULL)
+""",
             nativeQuery = true)
     Page<FlaggedMessageProjection> findDeletedMessages(Pageable pageable);
+
+    @Query(value = """
+        SELECT * FROM conversations c
+        WHERE EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(c.messages) AS msg
+            WHERE msg ->> 'deletedAt' IS NOT NULL 
+               OR (msg ->> 'isDeleted')::boolean = true
+        )
+        ORDER BY c.updated_at DESC
+    """,
+            countQuery = """
+        SELECT count(*) FROM conversations c
+        WHERE EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(c.messages) AS msg
+            WHERE msg ->> 'deletedAt' IS NOT NULL 
+               OR (msg ->> 'isDeleted')::boolean = true
+        )
+    """,
+            nativeQuery = true)
+    Page<Conversation> findConversationsWithFlaggedMessages(Pageable pageable);
 }

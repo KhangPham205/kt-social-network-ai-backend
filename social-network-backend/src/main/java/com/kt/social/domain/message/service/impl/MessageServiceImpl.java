@@ -2,17 +2,20 @@
 package com.kt.social.domain.message.service.impl;
 
 import com.kt.social.common.constants.WebSocketConstants;
+import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.CursorPage;
 import com.kt.social.domain.message.dto.MessageRequest;
 import com.kt.social.domain.message.dto.MessageResponse;
 import com.kt.social.domain.message.model.Conversation;
 import com.kt.social.domain.message.repository.ConversationRepository;
+import com.kt.social.domain.moderation.event.MessageSentEvent;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.repository.UserRepository;
 import com.kt.social.domain.message.service.MessageService;
 import com.kt.social.domain.user.service.UserService;
 import com.kt.social.infra.storage.StorageService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +28,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MessageServiceImpl implements MessageService {
 
+    private final ApplicationEventPublisher eventPublisher;
     private final ConversationRepository conversationRepository;
     private final StorageService storageService;
     private final UserRepository userRepository;
@@ -101,6 +105,17 @@ public class MessageServiceImpl implements MessageService {
 
         // broadcast via STOMP
         broadcastToConversationMembers(conversationId, message);
+
+        // publish event for moderation logging
+        if (content != null && !content.isBlank()) {
+            eventPublisher.publishEvent(new MessageSentEvent(
+                    this,
+                    msgId,
+                    conversationId,
+                    content,
+                    senderId
+            ));
+        }
 
         return message;
     }
@@ -219,38 +234,54 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public void softDeleteMessage(String messageId) {
-        // Bước 1: Tìm Conversation chứa message này (Cần query JSONB)
+        // 1. Tìm Conversation
         Conversation convo = conversationRepository.findByMessageIdInJson(messageId)
-                .orElseThrow(() -> new RuntimeException("Message not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found or already deleted"));
 
         Long convoId = convo.getId();
 
-        // Bước 2: Lock để tránh race condition khi nhiều người cùng chat/xóa
+        // 2. Lock theo ID cuộc hội thoại để tránh race condition (khi sửa JSON List)
         synchronized (getLock(convoId)) {
+            // Query lại data mới nhất trong lock (nếu transaction isolation level cho phép)
+
             List<Map<String, Object>> messages = convo.getMessages();
             boolean found = false;
 
-            // Bước 3: Duyệt list để tìm và update
-            for (Map<String, Object> msg : messages) {
-                if (Objects.equals(String.valueOf(msg.get("id")), messageId)) {
-                    msg.put("deletedAt", Instant.now().toString()); // Đánh dấu xóa
+            // Duyệt ngược từ cuối lên (thường tin nhắn cần block là tin mới nhất) để nhanh hơn
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                Map<String, Object> msg = messages.get(i);
+                // So sánh chuỗi an toàn
+                if (messageId.equals(String.valueOf(msg.get("id")))) {
+
+                    // Cập nhật trạng thái
+                    msg.put("isDeleted", true);
+                    msg.put("deletedAt", Instant.now().toString());
+                    msg.put("isSystemBan", true); // Đánh dấu thêm cờ này để FE biết
+
                     found = true;
                     break;
                 }
             }
 
             if (found) {
+                convo.setMessages(messages); // Gán lại list đã sửa
                 convo.setUpdatedAt(Instant.now());
                 conversationRepository.save(convo);
 
-                // Bước 4: Bắn socket báo cho client biết tin nhắn đã bị xóa (để UI cập nhật realtime)
+                // 3. Gửi Socket
                 Map<String, Object> updatePayload = Map.of(
-                        "type", "MESSAGE_DELETED",
-                        "messageId", messageId,
-                        "conversationId", convoId
+                        "id", messageId,
+                        "conversationId", convoId,
+                        "content", "Tin nhắn đã bị gỡ bỏ.",
+                        "type", "MESSAGE_BLOCKED",
+                        "updatedAt", Instant.now().toString()
                 );
                 String topicDest = WebSocketConstants.CHAT_CONVERSATION_QUEUE + "/" + convoId;
                 messagingTemplate.convertAndSend(topicDest, updatePayload);
+
+                convoLocks.remove(convoId);
+            } else {
+                throw new ResourceNotFoundException("Message ID found in DB query but missing in JSON parsing.");
             }
         }
     }

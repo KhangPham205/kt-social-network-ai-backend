@@ -41,7 +41,8 @@ public class Conversation {
      *     "senderId": 3,
      *     "content": "Hello",
      *     "media": [ {"url": "...", "type": "image"} ],
-     *     "timestamp": "2025-11-08T15:24:12Z"
+     *     "timestamp": "2025-11-08T15:24:12Z",
+     *     "deletedAt": null,
      *   },
      *   ...
      * ]

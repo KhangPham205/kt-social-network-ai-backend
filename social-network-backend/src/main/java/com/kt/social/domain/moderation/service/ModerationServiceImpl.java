@@ -42,6 +42,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -322,6 +323,28 @@ public class ModerationServiceImpl implements ModerationService {
 
     @Override
     @Transactional(readOnly = true)
+    public PageVO<GroupedFlaggedMessageResponse> getGroupedFlaggedMessages(Pageable pageable) {
+        // 1. Lấy danh sách các cuộc hội thoại "có vấn đề"
+        Page<Conversation> page = conversationRepository.findConversationsWithFlaggedMessages(pageable);
+
+        // 2. Map sang DTO và lọc message vi phạm ngay trong memory (RAM)
+        List<GroupedFlaggedMessageResponse> content = page.getContent().stream()
+                .map(this::mapToGroupedResponse)
+                .toList();
+
+        // 3. Trả về PageVO
+        return PageVO.<GroupedFlaggedMessageResponse>builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(content.size())
+                .content(content)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageVO<ModerationLogResponse> getModerationLogs(String filter, Pageable pageable) {
         Specification<ModerationLog> spec = Specification.where(null);
 
@@ -395,37 +418,47 @@ public class ModerationServiceImpl implements ModerationService {
 
     @Override
     @Transactional
-    public void blockContent(Object id, TargetType targetType) { // Đổi Long id -> Object id hoặc String id
-        User admin = userService.getCurrentUser();
-        String idStr = String.valueOf(id); // Chuyển về String để xử lý chung
-
-        if (targetType == TargetType.POST) {
-            Long postId = Long.valueOf(idStr); // Parse lại Long cho Post
-            Post post = postRepository.findById(postId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-
-            post.setDeletedAt(Instant.now());
-            post.setSystemBan(true);
-            postRepository.save(post);
-
-        } else if (targetType == TargetType.COMMENT) {
-            Long commentId = Long.valueOf(idStr); // Parse lại Long cho Comment
-            Comment comment = commentRepository.findById(commentId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
-
-            comment.setDeletedAt(Instant.now());
-            commentRepository.save(comment);
-
-        } else if (targetType == TargetType.MESSAGE) {
-            // 🔥 LOGIC MỚI CHO MESSAGE
-            // Gọi sang MessageService để xử lý logic JSON
-            messageService.softDeleteMessage(idStr);
+    public void blockContent(String idStr, TargetType targetType) { // Nhận String trực tiếp
+        User actor = null;
+        try {
+            // Chỉ lấy user nếu đang trong ngữ cảnh request HTTP thông thường
+            if (SecurityContextHolder.getContext().getAuthentication() != null
+                    && SecurityContextHolder.getContext().getAuthentication().isAuthenticated()
+                    && !"anonymousUser".equals(SecurityContextHolder.getContext().getAuthentication().getPrincipal())) {
+                actor = userService.getCurrentUser();
+            }
+        } catch (Exception e) {
+            // Bỏ qua lỗi Authentication missing, coi như System đang thực hiện
+            log.info("Block content triggered by System (Async/AI)");
         }
 
-        // Ghi Log
-        // Lưu ý: targetId trong log của bạn đang là Long, có thể cần sửa entity ModerationLog
-        // để targetId là String nếu muốn lưu UUID message.
-        saveLog(admin, targetType, idStr, "BLOCK", "Admin blocked content");
+        try {
+            if (targetType == TargetType.POST) {
+                Long postId = Long.parseLong(idStr); // Parse Long ở đây
+                Post post = postRepository.findById(postId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+                post.setDeletedAt(Instant.now());
+                post.setSystemBan(true);
+                postRepository.save(post);
+
+            } else if (targetType == TargetType.COMMENT) {
+                Long commentId = Long.parseLong(idStr); // Parse Long ở đây
+                Comment comment = commentRepository.findById(commentId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
+                comment.setDeletedAt(Instant.now());
+                commentRepository.save(comment);
+
+            } else if (targetType == TargetType.MESSAGE) {
+                // ID là String UUID, truyền thẳng
+                messageService.softDeleteMessage(idStr);
+            }
+        } catch (NumberFormatException e) {
+            throw new BadRequestException("ID không hợp lệ cho loại " + targetType);
+        }
+
+        saveLog(actor, targetType, idStr, "BLOCK", "Admin blocked content");
     }
 
     @Override
@@ -625,6 +658,43 @@ public class ModerationServiceImpl implements ModerationService {
                 .numberOfElements(content.size())
                 .content(content)
                 .build();
+    }
+
+    // Helper method để map và filter
+    private GroupedFlaggedMessageResponse mapToGroupedResponse(Conversation convo) {
+        // Lọc trong JSON list: chỉ lấy tin nhắn đã xóa
+        List<ModerationMessageDetail> flaggedMsgs = convo.getMessages().stream()
+                .filter(msg -> msg.get("deletedAt") != null || Boolean.TRUE.equals(msg.get("isDeleted")))
+                .map(msg -> ModerationMessageDetail.builder()
+                        .id(String.valueOf(msg.get("id")))
+                        .senderId(parseLongSafely(msg.get("senderId")))
+                        .senderName((String) msg.get("senderName"))
+                        .content((String) msg.get("content"))
+                        .sentAt(parseInstantSafely(msg.get("createdAt")))
+                        .deletedAt(parseInstantSafely(msg.get("deletedAt")))
+                        // Kiểm tra xem có field isSystemBan trong JSON không (như bạn đã thêm ở bước trước)
+                        .isSystemBan(Boolean.TRUE.equals(msg.get("isSystemBan")))
+                        .build())
+                // Sort tin nhắn vi phạm mới nhất lên đầu (hoặc cũ nhất tùy bạn)
+                .sorted(Comparator.comparing(ModerationMessageDetail::getSentAt).reversed())
+                .toList();
+
+        return GroupedFlaggedMessageResponse.builder()
+                .conversationId(convo.getId())
+                .conversationTitle(convo.getTitle() != null ? convo.getTitle() : "Cuộc trò chuyện") // Có thể xử lý tên nếu là chat 1-1
+                .isGroup(Boolean.TRUE.equals(convo.getIsGroup()))
+                .lastUpdatedAt(convo.getUpdatedAt())
+                .flaggedMessages(flaggedMsgs)
+                .build();
+    }
+
+    private Instant parseInstantSafely(Object obj) {
+        if (obj == null) return null;
+        try {
+            return Instant.parse(String.valueOf(obj));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // Helper parse Long an toàn
