@@ -84,11 +84,13 @@ public class ModerationController {
 
     @GetMapping("/{type}/{id}/history")
     @PreAuthorize("hasAnyAuthority('MODERATION:ACCESS')")
-    public ResponseEntity<List<ModerationLogResponse>> getModerationHistory(
+    public ResponseEntity<PageVO<ModerationLogResponse>> getModerationHistory(
             @PathVariable TargetType type,
-            @PathVariable String id
+            @PathVariable String id,
+            @ParameterObject Pageable pageable,
+            @RequestParam(required = false) String filter
     ) {
-        return ResponseEntity.ok(moderationService.getHistory(type, id));
+        return ResponseEntity.ok(moderationService.getHistory(type, id, pageable, filter));
     }
 
     /**

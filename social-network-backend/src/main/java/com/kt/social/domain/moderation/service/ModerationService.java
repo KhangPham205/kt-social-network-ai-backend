@@ -25,7 +25,7 @@ public interface ModerationService {
     PageVO<GroupedFlaggedMessageResponse> getGroupedFlaggedMessages(Pageable pageable);
     @Transactional(readOnly = true)
     PageVO<ModerationLogResponse> getModerationLogs(String filter, Pageable pageable);
-    List<ModerationLogResponse> getHistory(TargetType type, String id);
+    PageVO<ModerationLogResponse> getHistory(TargetType type, String id, Pageable pageable, String filter);
 
     void updateUserStatus(Long userId, AccountStatus newStatus, String reason);
 

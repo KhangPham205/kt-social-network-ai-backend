@@ -382,11 +382,18 @@ public class ModerationServiceImpl implements ModerationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ModerationLogResponse> getHistory(TargetType type, String id) {
-        List<ModerationLog> logs = moderationLogRepository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(type, id);
-        return logs.stream()
+    public PageVO<ModerationLogResponse> getHistory(TargetType type, String id, Pageable pageable, String filter) {
+
+        // 1. Gọi Repository
+        Page<ModerationLog> page = moderationLogRepository.findHistory(type, id, filter, pageable);
+
+        // 2. Map sang DTO
+        List<ModerationLogResponse> content = page.getContent().stream()
                 .map(this::mapToDto)
                 .toList();
+
+        // 3. Trả về PageVO (bao gồm content + page, size, totalElements, totalPages)
+        return buildPageVO(page, content);
     }
 
     @Override
