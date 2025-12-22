@@ -191,8 +191,8 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageVO<ReportResponse> getReportsByContent(Long targetId, TargetType targetType, Pageable pageable) {
-        Page<Report> page = reportRepository.findByTargetTypeAndTargetId(targetType, targetId.toString(), pageable);
+    public PageVO<ReportResponse> getReportsByContent(String targetId, TargetType targetType, Pageable pageable) {
+        Page<Report> page = reportRepository.findByTargetTypeAndTargetId(targetType, targetId, pageable);
 
         List<ReportResponse> content = page.getContent().stream()
                 .map(reportMapper::toResponse)
