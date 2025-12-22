@@ -25,7 +25,6 @@ public interface ConversationMemberRepository extends JpaRepository<Conversation
     // Lấy danh sách ID thành viên
     List<ConversationMember> findByConversationId(Long conversationId);
 
-    // 🔥 QUAN TRỌNG: Dùng JOIN FETCH để tránh lỗi N+1 khi gọi getConversation() sau này
     @Query("SELECT cm FROM ConversationMember cm " +
             "JOIN FETCH cm.conversation c " +
             "LEFT JOIN FETCH c.members m " +  // Fetch luôn members của conversation để hiển thị avatar

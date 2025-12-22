@@ -51,31 +51,30 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     @Query(value = """
     SELECT 
         CAST(msg ->> 'id' AS TEXT) as id,
-        CAST(c.id AS BIGINT) as conversationId,  -- Sửa lại cast cho đúng
-        c.title as conversationTitle,           -- Lấy thêm title để admin biết nhóm nào
-        CAST(c.is_group AS BOOLEAN) as isGroup, -- Biết là chat 1-1 hay group
+        CAST(c.id AS BIGINT) as conversationId,
+        c.title as conversationTitle,
+        CAST(c.is_group AS BOOLEAN) as isGroup,
         CAST(msg ->> 'senderId' AS BIGINT) as senderId,
         msg ->> 'senderName' as senderName,
         msg ->> 'senderAvatar' as senderAvatar,
         msg ->> 'content' as content,
         msg ->> 'createdAt' as sentAt,
         CAST(msg ->> 'deletedAt' AS TIMESTAMP) as deletedAt,
-        msg -> 'media' as media
-        
+        CAST(msg -> 'media' AS TEXT) as media
     FROM conversations c,
          jsonb_array_elements(c.messages) msg
     WHERE (msg ->> 'deletedAt' IS NOT NULL)
-       -- Admin thường muốn xem cả tin bị User xóa VÀ tin bị System Ban
-       -- Nếu chỉ muốn xem tin bị SYSTEM BLOCK thì cần thêm field 'isSystemBan' trong JSON message
-    ORDER BY CAST(msg ->> 'createdAt' AS TIMESTAMP) DESC -- Sort mới nhất
+    AND (:filter IS NULL OR msg ->> 'content' ILIKE %:filter%)
+    ORDER BY CAST(msg ->> 'createdAt' AS TIMESTAMP) DESC
 """,
             countQuery = """
     SELECT count(*)
     FROM conversations c, jsonb_array_elements(c.messages) msg
     WHERE (msg ->> 'deletedAt' IS NOT NULL)
+    AND (:filter IS NULL OR msg ->> 'content' ILIKE %:filter%)
 """,
             nativeQuery = true)
-    Page<FlaggedMessageProjection> findDeletedMessages(Pageable pageable);
+    Page<FlaggedMessageProjection> findDeletedMessages(@Param("filter") String filter, Pageable pageable);
 
     @Query(value = """
         SELECT * FROM conversations c

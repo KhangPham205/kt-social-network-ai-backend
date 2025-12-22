@@ -448,14 +448,28 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     // ------------------------- HELPER METHODS -------------------------
-
     private ConversationSummaryResponse toConversationSummaryDto(Conversation c, Long viewerId) {
-        Map<String, Object> lastMessage = null;
+        // 1. XỬ LÝ LAST MESSAGE
+        Map<String, Object> processedLastMessage = null;
+
         if (c.getMessages() != null && !c.getMessages().isEmpty()) {
-            lastMessage = c.getMessages().get(0);
+            Map<String, Object> rawMsg = c.getMessages().get(c.getMessages().size() - 1);
+
+            processedLastMessage = new HashMap<>(rawMsg);
+
+            boolean isDeleted = rawMsg.get("deletedAt") != null
+                    || Boolean.TRUE.equals(rawMsg.get("isDeleted"))
+                    || Boolean.TRUE.equals(rawMsg.get("isSystemBan"));
+
+            if (isDeleted) {
+                processedLastMessage.put("content", "Tin nhắn đã bị gỡ bỏ");
+
+                processedLastMessage.put("media", null);
+                processedLastMessage.put("type", "REVOKED"); // Đánh dấu loại tin để FE render màu xám/nghiêng
+            }
         }
 
-        // Lazy Loading Warning: Đảm bảo c.getMembers() đã được fetch hoặc Transaction còn active
+        // 2. Xử lý Participants
         List<ParticipantDto> participants = c.getMembers().stream()
                 .map(m -> ParticipantDto.builder()
                         .id(m.getUser().getId())
@@ -465,6 +479,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .build())
                 .toList();
 
+        // 3. Xử lý Title và Avatar hội thoại
         String finalTitle = c.getTitle();
         String finalMediaUrl = c.getMediaUrl();
 
@@ -481,12 +496,13 @@ public class ConversationServiceImpl implements ConversationService {
             }
         }
 
+        // 4. Build Response
         return ConversationSummaryResponse.builder()
                 .id(c.getId())
                 .title(finalTitle)
                 .mediaUrl(finalMediaUrl)
                 .isGroup(Boolean.TRUE.equals(c.getIsGroup()))
-                .lastMessage(lastMessage)
+                .lastMessage(processedLastMessage) // Truyền map đã xử lý vào
                 .participants(participants)
                 .updatedAt(c.getUpdatedAt() != null ? c.getUpdatedAt() : c.getCreatedAt())
                 .build();

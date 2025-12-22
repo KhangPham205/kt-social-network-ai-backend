@@ -256,7 +256,7 @@ public class MessageServiceImpl implements MessageService {
                     // Cập nhật trạng thái
                     msg.put("isDeleted", true);
                     msg.put("deletedAt", Instant.now().toString());
-                    msg.put("isSystemBan", true); // Đánh dấu thêm cờ này để FE biết
+                    msg.put("isSystemBan", true);
 
                     found = true;
                     break;
@@ -269,15 +269,15 @@ public class MessageServiceImpl implements MessageService {
                 conversationRepository.save(convo);
 
                 // 3. Gửi Socket
-                Map<String, Object> updatePayload = Map.of(
-                        "id", messageId,
-                        "conversationId", convoId,
-                        "content", "Tin nhắn đã bị gỡ bỏ.",
-                        "type", "MESSAGE_BLOCKED",
-                        "updatedAt", Instant.now().toString()
-                );
-                String topicDest = WebSocketConstants.CHAT_CONVERSATION_QUEUE + "/" + convoId;
-                messagingTemplate.convertAndSend(topicDest, updatePayload);
+//                Map<String, Object> updatePayload = Map.of(
+//                        "id", messageId,
+//                        "conversationId", convoId,
+//                        "content", "Tin nhắn đã bị gỡ bỏ.",
+//                        "type", "MESSAGE_BLOCKED",
+//                        "updatedAt", Instant.now().toString()
+//                );
+//                String topicDest = WebSocketConstants.CHAT_CONVERSATION_QUEUE + "/" + convoId;
+//                messagingTemplate.convertAndSend(topicDest, updatePayload);
 
                 convoLocks.remove(convoId);
             } else {

@@ -20,7 +20,7 @@ public class ModerationMessageResponse {
     private String content;
     private String sentAt; // Timestamp trong JSON thường là String
 
-    private List<Map<String, String>> media;
+    private List<Map<String, Object>> media;
 
     private Instant deletedAt;
 

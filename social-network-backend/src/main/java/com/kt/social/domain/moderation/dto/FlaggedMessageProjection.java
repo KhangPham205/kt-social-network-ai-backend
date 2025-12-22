@@ -5,11 +5,14 @@ import java.time.Instant;
 public interface FlaggedMessageProjection {
     String getId();
     Long getConversationId();
+    String getConversationTitle();
+    Boolean getIsGroup();
     Long getSenderId();
     String getSenderName();
     String getSenderAvatar();
     String getContent();
-    String getSentAt();
+    String getSentAt(); // Hoặc Instant tùy bạn cấu hình
     Instant getDeletedAt();
-    Object getMedia();
+
+    String getMedia();
 }

@@ -117,14 +117,14 @@ public class ModerationController {
 
     /**     * Lấy danh sách MESSAGE vi phạm (đã bị xóa mềm)
      */
-//    @GetMapping("/messages/flagged")
-//    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
-//    public ResponseEntity<PageVO<ModerationMessageResponse>> getFlaggedMessages(
-//            @RequestParam(required = false) String filter,
-//            @ParameterObject Pageable pageable
-//    ) {
-//        return ResponseEntity.ok(moderationService.getFlaggedMessages(filter, pageable));
-//    }
+    @GetMapping("/messages/flagged")
+    @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
+    public ResponseEntity<PageVO<ModerationMessageResponse>> getFlaggedMessages(
+            @RequestParam(required = false) String filter,
+            @ParameterObject Pageable pageable
+    ) {
+        return ResponseEntity.ok(moderationService.getFlaggedMessages(filter, pageable));
+    }
 
     @GetMapping("/messages/flagged/grouped")
     public ResponseEntity<PageVO<GroupedFlaggedMessageResponse>> getGroupedFlaggedMessages(
