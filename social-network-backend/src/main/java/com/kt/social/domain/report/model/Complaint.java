@@ -26,7 +26,7 @@ public class Complaint extends BaseEntity {
     private TargetType targetType; // POST, COMMENT
 
     @Column(nullable = false)
-    private Long targetId; // ID của Post hoặc Comment
+    private String targetId; // ID của Post hoặc Comment
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)

@@ -19,7 +19,7 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long>, Jpa
     // Kiểm tra xem đã có khiếu nại nào cho nội dung này chưa (tránh spam)
     boolean existsByTargetTypeAndTargetId(TargetType targetType, Long targetId);
 
-    Page<Complaint> findByTargetTypeAndTargetId(TargetType targetType, Long targetId, Pageable pageable);
+    Page<Complaint> findByTargetTypeAndTargetId(TargetType targetType, String targetId, Pageable pageable);
 
     @Query("SELECT c.targetId as id, COUNT(c) as count " +
             "FROM Complaint c " +

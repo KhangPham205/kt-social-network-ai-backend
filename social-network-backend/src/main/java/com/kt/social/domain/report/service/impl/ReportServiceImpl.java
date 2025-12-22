@@ -210,7 +210,7 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageVO<ComplaintResponse> getComplaintsByContent(Long targetId, TargetType targetType, Pageable pageable) {
+    public PageVO<ComplaintResponse> getComplaintsByContent(String targetId, TargetType targetType, Pageable pageable) {
         Page<Complaint> page = complaintRepository.findByTargetTypeAndTargetId(targetType, targetId, pageable);
 
         List<ComplaintResponse> content = page.getContent().stream()
@@ -244,7 +244,7 @@ public class ReportServiceImpl implements ReportService {
         Complaint complaint = Complaint.builder()
                 .user(currentUser)
                 .targetType(request.getTargetType())
-                .targetId(Long.valueOf(request.getTargetId()))
+                .targetId(request.getTargetId())
                 .content(request.getReason())
                 .build();
 

@@ -158,7 +158,7 @@ public class ModerationController {
     @PreAuthorize("hasAuthority('MODERATION:ACCESS')")
     public ResponseEntity<PageVO<ComplaintResponse>> getContentComplaints(
             @PathVariable TargetType type,
-            @PathVariable Long id,
+            @PathVariable String id,
             @ParameterObject Pageable pageable
     ) {
         // Gọi service lấy danh sách complaint theo content

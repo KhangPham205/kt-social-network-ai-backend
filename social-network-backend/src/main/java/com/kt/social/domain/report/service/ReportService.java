@@ -23,7 +23,7 @@ public interface ReportService {
     ComplaintResponse getComplaintById(Long id);
 
     PageVO<ReportResponse> getReportsByContent(String targetId, TargetType targetType, Pageable pageable);
-    PageVO<ComplaintResponse> getComplaintsByContent(Long targetId, TargetType targetType, Pageable pageable);
+    PageVO<ComplaintResponse> getComplaintsByContent(String targetId, TargetType targetType, Pageable pageable);
 
     //ComplaintResponse resolveComplaint(Long complaintId, ResolveComplaintRequest request);
 
