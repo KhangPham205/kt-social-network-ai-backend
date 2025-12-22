@@ -118,24 +118,43 @@ public class ContentModerationListener {
 
     private void handleToxicPostOrComment(ContentCreatedEvent event, String reason) {
         Instant now = Instant.now();
+        Long authorId = null; // Biến để lưu ID tác giả
 
-        // 1. Soft Delete Entity
+        // 1. Soft Delete Entity & Lấy Author ID
         if (event.getTargetType() == TargetType.POST) {
-            postRepository.findById(event.getTargetId()).ifPresent(post -> {
+            Post post = postRepository.findById(event.getTargetId()).orElse(null);
+            if (post != null) {
+                // Soft delete
                 post.setDeletedAt(now);
                 post.setViolationDetails(reason);
                 post.setSystemBan(true);
                 postRepository.save(post);
-            });
+
+                // Lấy Author ID (Giả sử post.getAuthor() trả về User entity)
+                if (post.getAuthor() != null) {
+                    authorId = post.getAuthor().getId();
+                }
+            }
         } else if (event.getTargetType() == TargetType.COMMENT) {
-            commentRepository.findById(event.getTargetId()).ifPresent(comment -> {
+            Comment comment = commentRepository.findById(event.getTargetId()).orElse(null);
+            if (comment != null) {
+                // Soft delete
                 comment.setDeletedAt(now);
                 commentRepository.save(comment);
-            });
+
+                // Lấy Author ID (Giả sử comment.getUser() trả về User entity)
+                if (comment.getAuthor() != null) {
+                    authorId = comment.getAuthor().getId();
+                }
+            }
         }
 
-        // 2. Tạo Report Hệ Thống
-        createSystemReportForPostOrComment(event.getTargetId(), event.getTargetType(), reason);
+        // 2. Tạo Report Hệ Thống (CHỈ TẠO KHI CÓ AUTHOR ID)
+        if (authorId != null) {
+            createSystemReportForPostOrComment(event.getTargetId(), event.getTargetType(), authorId, reason);
+        } else {
+            log.warn("⚠️ Không tìm thấy tác giả cho {} ID {}, không thể tạo Report.", event.getTargetType(), event.getTargetId());
+        }
 
         // 3. Ghi Moderation Log
         saveModerationLog(event.getTargetType(), event.getTargetId().toString(), reason);
@@ -165,21 +184,25 @@ public class ContentModerationListener {
     /**
      * Tạo Report cho Post/Comment (ID là Long)
      */
-    private void createSystemReportForPostOrComment(Long targetId, TargetType type, String reason) {
+    private void createSystemReportForPostOrComment(Long targetId, TargetType type, Long targetUserId, String reason) {
         try {
             boolean exists = reportRepository.existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(targetId.toString(), type);
             if (!exists) {
                 Report report = Report.builder()
                         .targetId(targetId.toString())
                         .targetType(type)
+                        .targetUserId(targetUserId) // <--- QUAN TRỌNG: Thêm dòng này để fix lỗi null
                         .reason(ReportReason.HARASSMENT)
+                        .customReason(reason) // Nên lưu lý do chi tiết từ AI vào đây
                         .isBannedBySystem(true)
+                        .status(com.kt.social.domain.report.enums.ReportStatus.PENDING) // Thêm status nếu entity yêu cầu
                         .createdAt(Instant.now())
                         .build();
                 reportRepository.save(report);
             }
         } catch (Exception e) {
             log.error("⚠️ Failed to create system report for Post/Comment: {}", e.getMessage());
+            // Không ném exception ra ngoài để tránh rollback transaction chính
         }
     }
 

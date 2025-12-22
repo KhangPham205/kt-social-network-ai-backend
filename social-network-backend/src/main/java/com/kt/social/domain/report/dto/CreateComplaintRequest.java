@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateComplaintRequest {
-    private Long targetId;
+    private String targetId;
     private TargetType targetType;
     private String reason;
 }

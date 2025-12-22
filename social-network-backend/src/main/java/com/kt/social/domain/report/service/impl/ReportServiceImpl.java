@@ -233,18 +233,18 @@ public class ReportServiceImpl implements ReportService {
         User currentUser = userService.getCurrentUser();
 
         // 1. Kiểm tra trùng lặp (Một nội dung chỉ được khiếu nại 1 lần đang chờ xử lý)
-        if (complaintRepository.existsByTargetTypeAndTargetId(request.getTargetType(), request.getTargetId())) {
+        if (complaintRepository.existsByTargetTypeAndTargetId(request.getTargetType(), Long.valueOf(request.getTargetId()))) {
             throw new BadRequestException("Nội dung này đang có khiếu nại chờ xử lý hoặc đã được giải quyết.");
         }
 
         // 2. Validate và Kiểm tra quyền sở hữu (User chỉ được khiếu nại bài của chính mình)
-        validateContentOwnership(currentUser.getId(), request.getTargetType(), request.getTargetId());
+        validateContentOwnership(currentUser.getId(), request.getTargetType(), Long.valueOf(request.getTargetId()));
 
         // 3. Tạo Complaint
         Complaint complaint = Complaint.builder()
                 .user(currentUser)
                 .targetType(request.getTargetType())
-                .targetId(request.getTargetId())
+                .targetId(Long.valueOf(request.getTargetId()))
                 .content(request.getReason())
                 .build();
 
