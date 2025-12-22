@@ -65,7 +65,6 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
          jsonb_array_elements(c.messages) msg
     WHERE (msg ->> 'deletedAt' IS NOT NULL)
     AND (:filter IS NULL OR msg ->> 'content' ILIKE %:filter%)
-    ORDER BY CAST(msg ->> 'createdAt' AS TIMESTAMP) DESC
 """,
             countQuery = """
     SELECT count(*)

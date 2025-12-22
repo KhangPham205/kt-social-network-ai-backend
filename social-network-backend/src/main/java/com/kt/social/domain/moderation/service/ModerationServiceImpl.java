@@ -45,6 +45,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -52,6 +54,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
@@ -240,38 +243,35 @@ public class ModerationServiceImpl implements ModerationService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<PostResponse> getFlaggedPosts(String filter, Pageable pageable) {
-        // 1. Tách từ khóa tìm kiếm (nếu filter dạng content=='abc')
         String keyword = extractKeyword(filter);
 
-        // 2. Gọi Repository lấy TẤT CẢ (Đã xóa OR Có Report)
-        Page<Post> page = postRepository.findAllFlaggedPosts(keyword, pageable);
+        Pageable sqlPageable = mapNativeQueryPageable(pageable, "POST");
 
-        // 3. Map sang DTO
+        Page<Post> page = postRepository.findAllFlaggedPosts(keyword, sqlPageable);
+
         List<PostResponse> content = page.getContent().stream()
                 .map(postMapper::toDto)
                 .toList();
 
-        // 4. Điền số lượng report/complaint
         enrichWithCounts(content, PostResponse::getId, PostResponse::setReportCount, PostResponse::setComplaintCount, TargetType.POST);
 
         return buildPageVO(page, content);
     }
 
+    // --- 2. COMMENT ---
     @Override
     @Transactional(readOnly = true)
     public PageVO<CommentResponse> getFlaggedComments(String filter, Pageable pageable) {
-        // 1. Tách từ khóa
         String keyword = extractKeyword(filter);
 
-        // 2. Gọi Repository
-        Page<Comment> page = commentRepository.findAllFlaggedComments(keyword, pageable);
+        Pageable sqlPageable = mapNativeQueryPageable(pageable, "COMMENT");
 
-        // 3. Map sang DTO
+        Page<Comment> page = commentRepository.findAllFlaggedComments(keyword, sqlPageable);
+
         List<CommentResponse> content = page.getContent().stream()
                 .map(commentMapper::toDto)
                 .toList();
 
-        // 4. Điền số lượng
         enrichWithCounts(content, CommentResponse::getId, CommentResponse::setReportCount, CommentResponse::setComplaintCount, TargetType.COMMENT);
 
         return buildPageVO(page, content);
@@ -281,20 +281,35 @@ public class ModerationServiceImpl implements ModerationService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<ModerationMessageResponse> getFlaggedMessages(String filter, Pageable pageable) {
-        // 1. Gọi Repo
-        Page<FlaggedMessageProjection> page = conversationRepository.findDeletedMessages(filter, pageable);
+        // [QUAN TRỌNG] Convert Pageable Java -> SQL (JSONB)
+        Pageable sqlPageable = mapNativeQueryPageable(pageable, "MESSAGE");
+
+        // Gọi Repo
+        Page<FlaggedMessageProjection> page = conversationRepository.findDeletedMessages(filter, sqlPageable);
 
         List<ModerationMessageResponse> content = page.getContent().stream()
                 .map(p -> {
-                    // --- XỬ LÝ MAP MEDIA (Parse từ JSON String) ---
+                    // 1. Parse Media
                     List<Map<String, Object>> mediaList = new ArrayList<>();
                     String mediaJson = p.getMedia();
-
-                    if (mediaJson != null && !mediaJson.isEmpty() && !mediaJson.equals("null")) {
+                    if (mediaJson != null && !mediaJson.isEmpty() && !"null".equals(mediaJson)) {
                         try {
                             mediaList = objectMapper.readValue(mediaJson, new TypeReference<List<Map<String, Object>>>() {});
                         } catch (JsonProcessingException e) {
                             log.error("Error parsing media JSON for message {}: {}", p.getId(), e.getMessage());
+                        }
+                    }
+
+                    // 2. Parse Date (String -> Instant)
+                    // Postgres JSON trả về String dạng ISO-8601 (ví dụ: "2023-10-25T10:00:00Z")
+                    Instant sentAtInstant = null;
+                    if (p.getSentAt() != null) {
+                        try {
+                            // Thường chuỗi trong JSONB sẽ có quote bao quanh (VD: "2023..."), cần check kỹ
+                            String rawDate = p.getSentAt().replace("\"", "");
+                            sentAtInstant = Instant.parse(rawDate);
+                        } catch (DateTimeParseException e) {
+                            log.warn("Cannot parse sentAt: {}", p.getSentAt());
                         }
                     }
 
@@ -305,23 +320,21 @@ public class ModerationServiceImpl implements ModerationService {
                             .senderName(p.getSenderName())
                             .senderAvatar(p.getSenderAvatar())
                             .content(p.getContent())
-                            .sentAt(p.getSentAt()) // Cần parse String sang Instant nếu projection trả về String
+                            .sentAt(String.valueOf(sentAtInstant))
                             .deletedAt(p.getDeletedAt())
-                            .media(mediaList) // Set list đã parse
+                            .media(mediaList)
                             .build();
                 })
                 .collect(Collectors.toList());
 
-        // 2. Điền số lượng report (Giữ nguyên logic cũ của bạn)
         try {
             enrichWithCounts(content,
-                    // Message ID là String UUID, không ép sang Long được -> Để nguyên String
                     ModerationMessageResponse::getId,
                     ModerationMessageResponse::setReportCount,
                     ModerationMessageResponse::setComplaintCount,
                     TargetType.MESSAGE);
         } catch (Exception e) {
-            log.error("Error enriching counts: {}", e.getMessage());
+            log.error("Error enriching counts for messages: {}", e.getMessage());
         }
 
         return buildPageVO(page, content);
@@ -723,5 +736,59 @@ public class ModerationServiceImpl implements ModerationService {
             }
         }
         return filter; // Trả về nguyên gốc nếu client gửi string thường
+    }
+
+    private Pageable mapNativeQueryPageable(Pageable pageable, String type) {
+        // 1. Nếu không sort gì cả -> Default sort
+        if (pageable.getSort().isUnsorted()) {
+            String defaultSortSql;
+            if ("MESSAGE".equals(type)) {
+                defaultSortSql = "CAST(msg ->> 'createdAt' AS TIMESTAMP)";
+            } else {
+                defaultSortSql = "created_at";
+            }
+            return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                    JpaSort.unsafe(Sort.Direction.DESC, defaultSortSql));
+        }
+
+        // 2. Map các field sort từ Frontend -> Database
+        List<Sort> sorts = new ArrayList<>();
+
+        pageable.getSort().forEach(order -> {
+            String property = order.getProperty();
+            Sort.Direction direction = order.getDirection();
+
+            String sqlExpression = property;
+
+            if ("createdAt".equals(property)) {
+                if ("MESSAGE".equals(type)) {
+                    sqlExpression = "CAST(msg ->> 'createdAt' AS TIMESTAMP)";
+                } else {
+                    sqlExpression = "created_at";
+                }
+            }
+            // Xử lý field 'updatedAt'
+            else if ("updatedAt".equals(property)) {
+                if ("MESSAGE".equals(type)) {
+                    sqlExpression = "updated_at";
+                } else {
+                    sqlExpression = "updated_at";
+                }
+            }
+            // Nếu lỡ truyền 'created_at' snake_case từ FE
+            else if ("created_at".equals(property)) {
+                sqlExpression = "created_at";
+            }
+
+            // Add vào list sort
+            sorts.add(JpaSort.unsafe(direction, sqlExpression));
+        });
+
+        Sort finalSort = Sort.unsorted();
+        for (Sort s : sorts) {
+            finalSort = finalSort.and(s);
+        }
+
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), finalSort);
     }
 }

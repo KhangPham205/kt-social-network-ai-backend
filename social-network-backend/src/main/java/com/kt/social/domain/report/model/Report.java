@@ -27,7 +27,7 @@ public class Report {
 
     // --- Thông tin từ User ---
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reporter_id", nullable = false)
+    @JoinColumn(name = "reporter_id")
     private User reporter; // Người báo cáo
 
     @Column(name = "status")
