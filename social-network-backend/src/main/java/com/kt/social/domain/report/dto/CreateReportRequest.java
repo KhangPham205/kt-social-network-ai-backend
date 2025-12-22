@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 public class CreateReportRequest {
     private TargetType targetType; // POST, COMMENT
-    private Long targetId;
+    private String targetId;
     private ReportReason reason;
     private String customReason;   // Nếu reason là OTHER
 }

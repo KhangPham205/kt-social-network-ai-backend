@@ -15,7 +15,7 @@ import java.util.List;
 public class ReportResponse {
     private Long id;
     private TargetType targetType;
-    private Long targetId;
+    private String targetId;
 
     private Long reporterId;
     private String reporterName;

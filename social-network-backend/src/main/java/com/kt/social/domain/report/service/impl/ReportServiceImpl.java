@@ -50,24 +50,24 @@ public class ReportServiceImpl implements ReportService {
         User reporter = userRepository.findById(reporterId)
                 .orElseThrow(() -> new ResourceNotFoundException("Reporter not found"));
 
-        if (reportRepository.existsByReporterIdAndTargetTypeAndTargetId(reporterId, request.getTargetType(), request.getTargetId().toString())) {
+        if (reportRepository.existsByReporterIdAndTargetTypeAndTargetId(reporterId, request.getTargetType(), request.getTargetId())) {
             throw new BadRequestException("Bạn đã báo cáo nội dung này rồi.");
         }
 
         Long targetOwnerId = null;
 
         if (request.getTargetType() == TargetType.POST) {
-            Post post = postRepository.findById(request.getTargetId())
+            Post post = postRepository.findById(Long.valueOf(request.getTargetId()))
                     .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
             targetOwnerId = post.getAuthor().getId();
 
         } else if (request.getTargetType() == TargetType.COMMENT) {
-            Comment comment = commentRepository.findById(request.getTargetId())
+            Comment comment = commentRepository.findById(Long.valueOf(request.getTargetId()))
                     .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
             targetOwnerId = comment.getAuthor().getId();
 
         } else if (request.getTargetType() == TargetType.USER) {
-            targetOwnerId = request.getTargetId();
+            targetOwnerId = Long.valueOf(request.getTargetId());
         }
 
         if (targetOwnerId == null) {
@@ -77,7 +77,7 @@ public class ReportServiceImpl implements ReportService {
         Report report = Report.builder()
                 .reporter(reporter)
                 .targetType(request.getTargetType())
-                .targetId(request.getTargetId().toString())
+                .targetId(request.getTargetId())
                 .targetUserId(targetOwnerId)
                 .reason(request.getReason())
                 .customReason(request.getReason().name().equals("OTHER") ? request.getCustomReason() : null) // Nếu reason là OTHER

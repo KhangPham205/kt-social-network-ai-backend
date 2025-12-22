@@ -15,7 +15,7 @@ import java.time.Instant;
 @AllArgsConstructor
 public class ComplaintResponse {
     private Long id;
-    private Long targetId;
+    private String targetId;
     private TargetType targetType;
     private Long userId;
     private String userDisplayName;
