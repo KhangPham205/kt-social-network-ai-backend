@@ -13,6 +13,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Set;
 
 @Repository
 public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecificationExecutor<Report> {
@@ -33,4 +34,6 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
     boolean existsByTargetIdAndTargetTypeAndIsBannedBySystemIsNotNull(String targetId, TargetType targetType);
 
     long countByStatus(ReportStatus status);
-}
+
+    @Query("SELECT r.targetId FROM Report r WHERE r.targetType = :type AND r.targetId IN :ids")
+    Set<String> findReportedTargetIds(@Param("type") TargetType type, @Param("ids") List<String> ids);}

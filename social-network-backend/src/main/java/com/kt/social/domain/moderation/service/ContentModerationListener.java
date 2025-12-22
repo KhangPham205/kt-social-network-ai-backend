@@ -7,6 +7,7 @@ import com.kt.social.domain.moderation.model.ModerationLog;
 import com.kt.social.domain.moderation.repository.ModerationLogRepository;
 import com.kt.social.domain.react.enums.TargetType;
 import com.kt.social.domain.report.enums.ReportReason;
+import com.kt.social.domain.report.enums.ReportStatus;
 import com.kt.social.domain.report.model.Report;
 import com.kt.social.domain.report.repository.ReportRepository;
 import com.kt.social.domain.comment.model.Comment;
@@ -28,6 +29,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Component
@@ -43,10 +45,9 @@ public class ContentModerationListener {
     private final StorageService storageService;
     private final ModerationService moderationService;
 
-    /**
-     * 1. XỬ LÝ POST / COMMENT (Transactional Event)
-     * Chạy sau khi transaction commit thành công.
-     */
+    // =================================================================================
+    // 1. XỬ LÝ POST / COMMENT (Transactional)
+    // =================================================================================
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -61,7 +62,7 @@ public class ContentModerationListener {
                 if (textResult.isToxic()) {
                     log.warn("❌ Text Toxic Detected: {}", textResult.getReason());
                     handleToxicPostOrComment(event, textResult.getReason());
-                    return;
+                    return; // Nếu text vi phạm thì chặn luôn, không cần check ảnh
                 }
             }
 
@@ -70,7 +71,13 @@ public class ContentModerationListener {
             if (!mediaUrls.isEmpty()) {
                 for (String url : mediaUrls) {
                     if (isImage(url)) {
-                        checkImageContent(event, url);
+                        // Gọi hàm dùng chung checkSingleImage
+                        ModerationResult imageResult = checkSingleImage(url);
+                        if (imageResult != null && imageResult.isToxic()) {
+                            log.warn("❌ Image Toxic Detected: {}", imageResult.getReason());
+                            handleToxicPostOrComment(event, "[Image] " + imageResult.getReason());
+                            return; // Chặn ngay khi thấy 1 ảnh vi phạm
+                        }
                     }
                 }
             }
@@ -82,107 +89,129 @@ public class ContentModerationListener {
         }
     }
 
-    /**
-     * 2. XỬ LÝ MESSAGE (Standard Event)
-     * Chạy bất đồng bộ, độc lập với transaction gửi tin nhắn.
-     */
+    // =================================================================================
+    // 2. XỬ LÝ MESSAGE (Standard Event)
+    // =================================================================================
     @Async
     @EventListener
     public void handleMessageSentEvent(MessageSentEvent event) {
         log.info("🤖 AI bắt đầu kiểm duyệt tin nhắn: {}", event.getId());
+        String reason = null;
+        boolean isToxic = false;
 
         try {
-            // 1. Gọi AI Service để check text
-            ModerationResult result = aiServiceClient.checkContentToxicity(event.getContent());
+            // A. Kiểm tra Text
+            if (event.getContent() != null && !event.getContent().isBlank()) {
+                ModerationResult textResult = aiServiceClient.checkContentToxicity(event.getContent());
+                if (textResult.isToxic()) {
+                    isToxic = true;
+                    reason = "[Text] " + textResult.getReason();
+                }
+            }
 
-            // 2. Nếu phát hiện vi phạm
-            if (result.isToxic()) {
-                log.warn("❌ Phát hiện vi phạm tin nhắn {}: {}", event.getId(), result.getReason());
+            // B. Kiểm tra Hình ảnh (Nếu text sạch và có media)
+            if (!isToxic && event.getMedia() != null && !event.getMedia().isEmpty()) {
+                for (Map<String, Object> mediaItem : event.getMedia()) {
+                    String url = (String) mediaItem.get("url");
 
-                // 3. Gọi ModerationService để Block tin nhắn
-                // Lưu ý: Hàm blockContent đã được sửa để nhận String ID
+                    if (isImage(url)) {
+                        ModerationResult imageResult = checkSingleImage(url);
+                        if (imageResult != null && imageResult.isToxic()) {
+                            isToxic = true;
+                            reason = "[Image] " + imageResult.getReason();
+                            break; // Dừng ngay khi phát hiện ảnh vi phạm
+                        }
+                    }
+                }
+            }
+
+            // C. Xử lý kết quả
+            if (isToxic) {
+                log.warn("❌ Phát hiện vi phạm tin nhắn {}: {}", event.getId(), reason);
+
+                // 1. Block tin nhắn
                 moderationService.blockContent(event.getId(), TargetType.MESSAGE);
 
-                // 4. Tạo System Report (Log vào bảng Report nếu cần)
-                // Lưu ý: Chỉ tạo được nếu bảng Report hỗ trợ lưu ID dạng String (UUID)
-                createSystemReportForMessage(event.getId(), result.getReason());
+                // 2. Ghi Log (System Ban)
+                saveModerationLog(TargetType.MESSAGE, event.getId(), reason);
+
+                // 3. (Tùy chọn) Tạo Report nếu bảng Report hỗ trợ UUID
+                // createSystemReportForMessage(event.getId(), reason);
+
             } else {
                 log.info("✅ Tin nhắn an toàn: {}", event.getId());
             }
+
         } catch (Exception e) {
-            log.error("Lỗi khi kiểm duyệt tin nhắn {}: {}", event.getId(), e.getMessage());
+            log.error("⚠️ Lỗi khi kiểm duyệt tin nhắn {}: {}", event.getId(), e.getMessage());
         }
     }
 
-    // ---------------------------- Logic Xử Lý Vi Phạm ----------------------------
+    // =================================================================================
+    // LOGIC XỬ LÝ VI PHẠM & HELPER
+    // =================================================================================
 
+    /**
+     * Xử lý khi Post/Comment bị AI đánh dấu là độc hại
+     */
     private void handleToxicPostOrComment(ContentCreatedEvent event, String reason) {
         Instant now = Instant.now();
-        Long authorId = null; // Biến để lưu ID tác giả
+        Long authorId = null;
 
-        // 1. Soft Delete Entity & Lấy Author ID
+        // 1. Soft Delete Entity & Lấy ID tác giả
         if (event.getTargetType() == TargetType.POST) {
             Post post = postRepository.findById(event.getTargetId()).orElse(null);
             if (post != null) {
-                // Soft delete
                 post.setDeletedAt(now);
                 post.setViolationDetails(reason);
                 post.setSystemBan(true);
                 postRepository.save(post);
-
-                // Lấy Author ID (Giả sử post.getAuthor() trả về User entity)
-                if (post.getAuthor() != null) {
-                    authorId = post.getAuthor().getId();
-                }
+                if (post.getAuthor() != null) authorId = post.getAuthor().getId();
             }
         } else if (event.getTargetType() == TargetType.COMMENT) {
             Comment comment = commentRepository.findById(event.getTargetId()).orElse(null);
             if (comment != null) {
-                // Soft delete
                 comment.setDeletedAt(now);
                 commentRepository.save(comment);
-
-                // Lấy Author ID (Giả sử comment.getUser() trả về User entity)
-                if (comment.getAuthor() != null) {
-                    authorId = comment.getAuthor().getId();
-                }
+                // Lưu ý: Kiểm tra lại tên getter trong entity Comment (getAuthor hay getUser)
+                if (comment.getAuthor() != null) authorId = comment.getAuthor().getId();
             }
         }
 
-        // 2. Tạo Report Hệ Thống (CHỈ TẠO KHI CÓ AUTHOR ID)
+        // 2. Tạo Report (Chỉ tạo khi lấy được Author ID để tránh lỗi null DB)
         if (authorId != null) {
             createSystemReportForPostOrComment(event.getTargetId(), event.getTargetType(), authorId, reason);
-        } else {
-            log.warn("⚠️ Không tìm thấy tác giả cho {} ID {}, không thể tạo Report.", event.getTargetType(), event.getTargetId());
         }
 
-        // 3. Ghi Moderation Log
+        // 3. Ghi Log
         saveModerationLog(event.getTargetType(), event.getTargetId().toString(), reason);
-
         log.info("🚫 Auto-banned {} ID: {}", event.getTargetType(), event.getTargetId());
     }
 
-    private void checkImageContent(ContentCreatedEvent event, String url) {
+    /**
+     * Hàm dùng chung: Đọc file từ Storage và gửi sang AI Service
+     */
+    private ModerationResult checkSingleImage(String url) {
         try {
+            // Đọc bytes từ StorageService
             byte[] imageBytes = storageService.readFile(url);
-            if (imageBytes == null || imageBytes.length == 0) return;
+
+            if (imageBytes == null || imageBytes.length == 0) {
+                log.warn("⚠️ Không thể đọc file ảnh hoặc file rỗng: {}", url);
+                return null;
+            }
 
             String filename = extractFilename(url);
-            ModerationResult imageResult = aiServiceClient.checkImageToxicity(imageBytes, filename);
-
-            if (imageResult.isToxic()) {
-                log.warn("❌ Image Toxic Detected: {}", imageResult.getReason());
-                handleToxicPostOrComment(event, "[Image] " + imageResult.getReason());
-            }
-        } catch (Exception ex) {
-            log.error("⚠️ Failed to check image {}: {}", url, ex.getMessage());
+            // Gửi sang AI
+            return aiServiceClient.checkImageToxicity(imageBytes, filename);
+        } catch (Exception e) {
+            log.error("⚠️ Lỗi khi check ảnh {}: {}", url, e.getMessage());
+            return null;
         }
     }
 
-    // ---------------------------- Helper Tạo Report & Log ----------------------------
-
     /**
-     * Tạo Report cho Post/Comment (ID là Long)
+     * Lưu Report vào DB (Fix lỗi null target_user_id)
      */
     private void createSystemReportForPostOrComment(Long targetId, TargetType type, Long targetUserId, String reason) {
         try {
@@ -191,54 +220,24 @@ public class ContentModerationListener {
                 Report report = Report.builder()
                         .targetId(targetId.toString())
                         .targetType(type)
-                        .targetUserId(targetUserId) // <--- QUAN TRỌNG: Thêm dòng này để fix lỗi null
+                        .targetUserId(targetUserId) // ✅ Đã fix: Truyền ID người bị report
                         .reason(ReportReason.HARASSMENT)
-                        .customReason(reason) // Nên lưu lý do chi tiết từ AI vào đây
+                        .customReason(reason)
                         .isBannedBySystem(true)
-                        .status(com.kt.social.domain.report.enums.ReportStatus.PENDING) // Thêm status nếu entity yêu cầu
+                        .status(ReportStatus.PENDING)
                         .createdAt(Instant.now())
                         .build();
                 reportRepository.save(report);
             }
         } catch (Exception e) {
-            log.error("⚠️ Failed to create system report for Post/Comment: {}", e.getMessage());
-            // Không ném exception ra ngoài để tránh rollback transaction chính
-        }
-    }
-
-    /**
-     * Tạo Report cho Message (ID là String UUID)
-     */
-    private void createSystemReportForMessage(String messageIdStr, String reason) {
-        try {
-            // Giả sử bạn ĐÃ migrate bảng Report cột target_id sang String/Varchar
-            // Nếu chưa migrate, bạn chỉ nên ghi ModerationLog (đã xử lý ở hàm blockContent)
-
-            // Uncomment dòng dưới nếu bảng Report hỗ trợ String ID
-//             long count = reportRepository.countByTargetTypeAndTargetId(TargetType.MESSAGE, messageIdStr); // Cần repo hỗ trợ String
-//             if (count == 0) {
-//                 Report report = Report.builder()
-//                         .targetType(TargetType.MESSAGE)
-//                         .targetId(messageIdStr) // Cần sửa entity Report field targetId thành String
-//                         .reason(ReportReason.HARASSMENT)
-//                         .isBannedBySystem(true)
-//                         .createdAt(Instant.now())
-//                         .build();
-//                 reportRepository.save(report);
-//             }
-
-            // Thay vào đó, ta ghi Log (ModerationLog đã hỗ trợ String ID do bước trước ta làm)
-            saveModerationLog(TargetType.MESSAGE, messageIdStr, reason);
-
-        } catch (Exception e) {
-            log.error("⚠️ Failed to create system report for Message: {}", e.getMessage());
+            log.error("⚠️ Failed to create system report: {}", e.getMessage());
         }
     }
 
     private void saveModerationLog(TargetType type, String targetId, String reason) {
         ModerationLog logEntry = ModerationLog.builder()
                 .targetType(type)
-                .targetId(targetId) // Field này phải là String trong Entity
+                .targetId(targetId)
                 .action("AUTO_BAN")
                 .reason(reason)
                 .actor(null) // Null = System

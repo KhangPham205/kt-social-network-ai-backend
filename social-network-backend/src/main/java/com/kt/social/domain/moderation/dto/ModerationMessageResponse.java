@@ -23,6 +23,7 @@ public class ModerationMessageResponse {
     private List<Map<String, Object>> media;
 
     private Instant deletedAt;
+    private Boolean isSystemBan;
 
     private long reportCount;
     private long complaintCount;

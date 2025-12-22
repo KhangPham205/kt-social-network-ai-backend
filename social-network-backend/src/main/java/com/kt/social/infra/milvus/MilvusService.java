@@ -34,8 +34,7 @@ public class MilvusService {
     @Value("${milvus.port}")
     private int port;
 
-    @Value("${milvus.vector-dim}")
-    private int vectorDim; // 768
+    private static final int VECTOR_DIM = 768;
 
     private MilvusServiceClient milvusClient;
     private static final String POST_COLLECTION = "post_collection";
@@ -79,7 +78,7 @@ public class MilvusService {
                 FieldType vectorField = FieldType.newBuilder()
                         .withName("embedding")
                         .withDataType(DataType.FloatVector)
-                        .withDimension(vectorDim)
+                        .withDimension(VECTOR_DIM)
                         .build();
 
                 // Có thể thêm author_id nếu muốn lọc

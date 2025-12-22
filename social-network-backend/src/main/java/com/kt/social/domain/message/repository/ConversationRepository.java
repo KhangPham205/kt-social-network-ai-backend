@@ -63,25 +63,51 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
         CAST(msg -> 'media' AS TEXT) as media
     FROM conversations c,
          jsonb_array_elements(c.messages) msg
-    WHERE (msg ->> 'deletedAt' IS NOT NULL)
+    WHERE 
+    (
+        -- Điều kiện 1: Đã bị xóa (System ban hoặc delete)
+        (msg ->> 'deletedAt' IS NOT NULL)
+        OR 
+        -- Điều kiện 2: Có nằm trong bảng Report
+        EXISTS (
+            SELECT 1 FROM reports r 
+            WHERE r.target_type = 'MESSAGE' 
+            AND r.target_id = (msg ->> 'id')
+        )
+    )
     AND (:filter IS NULL OR msg ->> 'content' ILIKE %:filter%)
 """,
             countQuery = """
     SELECT count(*)
     FROM conversations c, jsonb_array_elements(c.messages) msg
-    WHERE (msg ->> 'deletedAt' IS NOT NULL)
+    WHERE 
+    (
+        (msg ->> 'deletedAt' IS NOT NULL)
+        OR 
+        EXISTS (
+            SELECT 1 FROM reports r 
+            WHERE r.target_type = 'MESSAGE' 
+            AND r.target_id = (msg ->> 'id')
+        )
+    )
     AND (:filter IS NULL OR msg ->> 'content' ILIKE %:filter%)
 """,
             nativeQuery = true)
-    Page<FlaggedMessageProjection> findDeletedMessages(@Param("filter") String filter, Pageable pageable);
+    Page<FlaggedMessageProjection> findFlaggedMessages(@Param("filter") String filter, Pageable pageable);
 
     @Query(value = """
         SELECT * FROM conversations c
         WHERE EXISTS (
             SELECT 1
             FROM jsonb_array_elements(c.messages) AS msg
-            WHERE msg ->> 'deletedAt' IS NOT NULL 
-               OR (msg ->> 'isDeleted')::boolean = true
+            WHERE 
+                (msg ->> 'deletedAt' IS NOT NULL OR (msg ->> 'isDeleted')::boolean = true)
+                OR 
+                EXISTS (
+                    SELECT 1 FROM reports r 
+                    WHERE r.target_type = 'MESSAGE' 
+                    AND r.target_id = (msg ->> 'id')
+                )
         )
         ORDER BY c.updated_at DESC
     """,
@@ -90,8 +116,14 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
         WHERE EXISTS (
             SELECT 1
             FROM jsonb_array_elements(c.messages) AS msg
-            WHERE msg ->> 'deletedAt' IS NOT NULL 
-               OR (msg ->> 'isDeleted')::boolean = true
+            WHERE 
+                (msg ->> 'deletedAt' IS NOT NULL OR (msg ->> 'isDeleted')::boolean = true)
+                OR 
+                EXISTS (
+                    SELECT 1 FROM reports r 
+                    WHERE r.target_type = 'MESSAGE' 
+                    AND r.target_id = (msg ->> 'id')
+                )
         )
     """,
             nativeQuery = true)

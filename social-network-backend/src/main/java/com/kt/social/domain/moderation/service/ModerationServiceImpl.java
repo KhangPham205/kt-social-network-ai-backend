@@ -59,6 +59,7 @@ import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -190,13 +191,13 @@ public class ModerationServiceImpl implements ModerationService {
         // Giả sử ReportRepository hỗ trợ đếm theo String ID hoặc bạn đã convert.
         long reportCount = 0;
         long complaintCount = 0;
-        try {
-            // Nếu bạn lưu targetId trong bảng Report là String -> Dùng thẳng messageId
-            // Nếu lưu là Long -> Cần hash hoặc logic khác. Ở đây giả định bạn xử lý được việc map ID.
-            // reportCount = reportRepository.countByTargetTypeAndTargetId(TargetType.MESSAGE, messageId);
-        } catch (Exception e) {
-            // Log error
-        }
+//        try {
+//            // Nếu bạn lưu targetId trong bảng Report là String -> Dùng thẳng messageId
+//            // Nếu lưu là Long -> Cần hash hoặc logic khác. Ở đây giả định bạn xử lý được việc map ID.
+//            // reportCount = reportRepository.countByTargetTypeAndTargetId(TargetType.MESSAGE, messageId);
+//        } catch (Exception e) {
+//            // Log error
+//        }
 
         // 7. Map sang DTO
         return ModerationMessageResponse.builder()
@@ -281,11 +282,9 @@ public class ModerationServiceImpl implements ModerationService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<ModerationMessageResponse> getFlaggedMessages(String filter, Pageable pageable) {
-        // [QUAN TRỌNG] Convert Pageable Java -> SQL (JSONB)
         Pageable sqlPageable = mapNativeQueryPageable(pageable, "MESSAGE");
 
-        // Gọi Repo
-        Page<FlaggedMessageProjection> page = conversationRepository.findDeletedMessages(filter, sqlPageable);
+        Page<FlaggedMessageProjection> page = conversationRepository.findFlaggedMessages(filter, sqlPageable);
 
         List<ModerationMessageResponse> content = page.getContent().stream()
                 .map(p -> {
@@ -343,15 +342,34 @@ public class ModerationServiceImpl implements ModerationService {
     @Override
     @Transactional(readOnly = true)
     public PageVO<GroupedFlaggedMessageResponse> getGroupedFlaggedMessages(Pageable pageable) {
-        // 1. Lấy danh sách các cuộc hội thoại "có vấn đề"
+        // 1. Lấy danh sách Conversation có vấn đề (Query trong Repo đã check: Deleted OR Exists in Report)
         Page<Conversation> page = conversationRepository.findConversationsWithFlaggedMessages(pageable);
 
-        // 2. Map sang DTO và lọc message vi phạm ngay trong memory (RAM)
-        List<GroupedFlaggedMessageResponse> content = page.getContent().stream()
-                .map(this::mapToGroupedResponse)
+        // 2. Gom tất cả Message ID trong trang hiện tại để query bảng Report 1 lần (Batch Query - Tránh N+1)
+        List<String> allMessageIds = page.getContent().stream()
+                .flatMap(c -> {
+                    if (c.getMessages() == null) return Stream.empty();
+                    return c.getMessages().stream()
+                            .map(m -> (String) m.get("id"))
+                            .filter(Objects::nonNull);
+                })
                 .toList();
 
-        // 3. Trả về PageVO
+        // 3. Tìm những ID nào thực sự đang bị Report (để dùng cho logic filter bên dưới)
+        Set<String> reportedMessageIds;
+        if (allMessageIds.isEmpty()) {
+            reportedMessageIds = Collections.emptySet();
+        } else {
+            reportedMessageIds = reportRepository.findReportedTargetIds(TargetType.MESSAGE, allMessageIds);
+        }
+
+        // 4. Map và Filter (Logic chính nằm ở mapToGroupedResponse)
+        List<GroupedFlaggedMessageResponse> content = page.getContent().stream()
+                .map(c -> mapToGroupedResponse(c, reportedMessageIds))
+                // (Tùy chọn) Chỉ lấy những conversation còn tin nhắn sau khi filter
+                .filter(g -> !g.getFlaggedMessages().isEmpty())
+                .collect(Collectors.toList());
+
         return PageVO.<GroupedFlaggedMessageResponse>builder()
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -682,20 +700,20 @@ public class ModerationServiceImpl implements ModerationService {
     // Helper method để map và filter
     private GroupedFlaggedMessageResponse mapToGroupedResponse(Conversation convo) {
         // Lọc trong JSON list: chỉ lấy tin nhắn đã xóa
-        List<ModerationMessageDetail> flaggedMsgs = convo.getMessages().stream()
+        List<ModerationMessageResponse> flaggedMsgs = convo.getMessages().stream()
                 .filter(msg -> msg.get("deletedAt") != null || Boolean.TRUE.equals(msg.get("isDeleted")))
-                .map(msg -> ModerationMessageDetail.builder()
+                .map(msg -> ModerationMessageResponse.builder()
                         .id(String.valueOf(msg.get("id")))
                         .senderId(parseLongSafely(msg.get("senderId")))
                         .senderName((String) msg.get("senderName"))
                         .content((String) msg.get("content"))
-                        .sentAt(parseInstantSafely(msg.get("createdAt")))
+                        .sentAt(String.valueOf(msg.get("createdAt")))
                         .deletedAt(parseInstantSafely(msg.get("deletedAt")))
                         // Kiểm tra xem có field isSystemBan trong JSON không (như bạn đã thêm ở bước trước)
                         .isSystemBan(Boolean.TRUE.equals(msg.get("isSystemBan")))
                         .build())
                 // Sort tin nhắn vi phạm mới nhất lên đầu (hoặc cũ nhất tùy bạn)
-                .sorted(Comparator.comparing(ModerationMessageDetail::getSentAt).reversed())
+                .sorted(Comparator.comparing(ModerationMessageResponse::getSentAt).reversed())
                 .toList();
 
         return GroupedFlaggedMessageResponse.builder()
@@ -790,5 +808,108 @@ public class ModerationServiceImpl implements ModerationService {
         }
 
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), finalSort);
+    }
+
+    private GroupedFlaggedMessageResponse mapToGroupedResponse(Conversation c, Set<String> reportedIds) {
+        List<ModerationMessageResponse> flaggedMsgs = new ArrayList<>();
+
+        if (c.getMessages() != null) {
+            for (Map<String, Object> msgMap : c.getMessages()) {
+                String msgId = (String) msgMap.get("id");
+
+                // Check 1: Đã bị xóa (System ban hoặc delete)
+                // Lưu ý: JSONB trả về có thể là String "true" hoặc Boolean true tùy driver
+                boolean isDeleted = msgMap.get("deletedAt") != null
+                        || Boolean.TRUE.equals(msgMap.get("isDeleted"))
+                        || "true".equalsIgnoreCase(String.valueOf(msgMap.get("isDeleted")));
+
+                // Check 2: Có nằm trong danh sách bị report không
+                boolean isReported = reportedIds.contains(msgId);
+
+                // LOGIC QUAN TRỌNG: Chỉ lấy nếu (Đã xóa) HOẶC (Bị report)
+                if (isDeleted || isReported) {
+                    flaggedMsgs.add(mapJsonToDto(msgMap, c.getId()));
+                }
+            }
+        }
+
+        // Enrich: Điền số lượng report/complaint cho từng tin nhắn trong list này
+        if (!flaggedMsgs.isEmpty()) {
+            try {
+                enrichWithCounts(flaggedMsgs,
+                        ModerationMessageResponse::getId,
+                        ModerationMessageResponse::setReportCount,
+                        ModerationMessageResponse::setComplaintCount,
+                        TargetType.MESSAGE);
+            } catch (Exception e) {
+                log.error("Error enriching counts for grouped messages conversation {}: {}", c.getId(), e.getMessage());
+            }
+        }
+
+        return GroupedFlaggedMessageResponse.builder()
+                .conversationId(c.getId())
+                .conversationTitle(c.getTitle()) // Có thể null nếu là chat 1-1
+                .isGroup(c.getIsGroup())
+                .flaggedMessages(flaggedMsgs)
+                .build();
+    }
+
+    /**
+     * Helper 2: Convert từ Map (JSONB) sang DTO
+     */
+    private ModerationMessageResponse mapJsonToDto(Map<String, Object> msgMap, Long conversationId) {
+        // 1. Parse ID & Basic fields
+        String id = (String) msgMap.get("id");
+        Long senderId = msgMap.get("senderId") != null ? ((Number) msgMap.get("senderId")).longValue() : null;
+        String senderName = (String) msgMap.get("senderName");
+        String senderAvatar = (String) msgMap.get("senderAvatar");
+        String content = (String) msgMap.get("content");
+
+        // 2. Parse Date (SentAt)
+        String sentAtStr = (String) msgMap.get("createdAt");
+        String sentAt = null;
+        if (sentAtStr != null) {
+            sentAt = sentAtStr; // Giữ nguyên String ISO hoặc parse sang Instant.toString() nếu cần chuẩn hóa
+        }
+
+        // 3. Parse Date (DeletedAt)
+        Object deletedAtObj = msgMap.get("deletedAt");
+        Instant deletedAt = null;
+        if (deletedAtObj != null) {
+            try {
+                deletedAt = Instant.parse(deletedAtObj.toString());
+            } catch (Exception e) {
+                log.warn("Cannot parse deletedAt for msg {}: {}", id, deletedAtObj);
+            }
+        }
+
+        // 4. Parse Media
+        // Trong Conversation Entity, messages thường là List<Map>, nên media bên trong cũng là List<Map> hoặc List<Object>
+        List<Map<String, Object>> mediaList = new ArrayList<>();
+        Object mediaObj = msgMap.get("media");
+        if (mediaObj instanceof List) {
+            mediaList = (List<Map<String, Object>>) mediaObj;
+        } else if (mediaObj instanceof String && !((String) mediaObj).isEmpty()) {
+            // Trường hợp hy hữu nó lưu dạng String JSON
+            try {
+                mediaList = objectMapper.readValue((String) mediaObj, new TypeReference<>() {});
+            } catch (Exception e) {
+                log.error("Error parsing media string for msg {}", id);
+            }
+        }
+
+        return ModerationMessageResponse.builder()
+                .id(id)
+                .conversationId(conversationId)
+                .senderId(senderId)
+                .senderName(senderName)
+                .senderAvatar(senderAvatar)
+                .content(content)
+                .sentAt(sentAt)
+                .deletedAt(deletedAt)
+                .media(mediaList)
+                .reportCount(0L)
+                .complaintCount(0L)
+                .build();
     }
 }

@@ -19,6 +19,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,7 +63,7 @@ public class MessageServiceImpl implements MessageService {
 
     private Map<String,Object> createAndSaveMessage(Long senderId, String senderName, String senderAvatar,
                                                     Long conversationId, String content, Long replyToId,
-                                                    List<org.springframework.web.multipart.MultipartFile> mediaFiles) {
+                                                    List<MultipartFile> mediaFiles) {
         Conversation convo = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
@@ -113,7 +115,8 @@ public class MessageServiceImpl implements MessageService {
                     msgId,
                     conversationId,
                     content,
-                    senderId
+                    senderId,
+                    media
             ));
         }
 

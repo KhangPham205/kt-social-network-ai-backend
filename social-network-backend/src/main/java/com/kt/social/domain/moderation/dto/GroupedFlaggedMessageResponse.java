@@ -15,5 +15,5 @@ public class GroupedFlaggedMessageResponse {
     private Instant lastUpdatedAt; // Để biết hội thoại này mới hay cũ
 
     // Danh sách các tin nhắn vi phạm trong hội thoại này
-    private List<ModerationMessageDetail> flaggedMessages;
+    private List<ModerationMessageResponse> flaggedMessages;
 }
