@@ -3,10 +3,7 @@ package com.kt.social.infra.milvus;
 import io.milvus.client.MilvusServiceClient;
 import io.milvus.grpc.*;
 import io.milvus.param.*;
-import io.milvus.param.collection.CreateCollectionParam;
-import io.milvus.param.collection.FieldType;
-import io.milvus.param.collection.HasCollectionParam;
-import io.milvus.param.collection.LoadCollectionParam;
+import io.milvus.param.collection.*;
 import io.milvus.param.dml.InsertParam;
 import io.milvus.param.dml.QueryParam;
 import io.milvus.param.dml.SearchParam;
@@ -14,7 +11,6 @@ import io.milvus.param.index.CreateIndexParam;
 import io.milvus.response.FieldDataWrapper;
 import io.milvus.response.QueryResultsWrapper;
 import io.milvus.response.SearchResultsWrapper;
-import io.milvus.param.collection.GetLoadStateParam;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,6 +56,19 @@ public class MilvusService {
     private void createPostCollectionIfNotExists() {
 
         try {
+
+//            try {
+//                milvusClient.dropCollection(
+//                        DropCollectionParam.newBuilder()
+//                                .withCollectionName(POST_COLLECTION)
+//                                .build()
+//                );
+//                log.warn("⚠️ ĐÃ DROP COLLECTION '{}' ĐỂ KHỞI TẠO LẠI!", POST_COLLECTION);
+//            } catch (Exception e) {
+//                // Bỏ qua lỗi nếu collection chưa tồn tại
+//                log.info("Collection chưa tồn tại hoặc đã bị xóa.");
+//            }
+
             R<Boolean> hasCollection = milvusClient.hasCollection(
                     HasCollectionParam.newBuilder().withCollectionName(POST_COLLECTION).build()
             );

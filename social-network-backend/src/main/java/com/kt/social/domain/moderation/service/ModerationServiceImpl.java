@@ -709,7 +709,6 @@ public class ModerationServiceImpl implements ModerationService {
                         .content((String) msg.get("content"))
                         .sentAt(String.valueOf(msg.get("createdAt")))
                         .deletedAt(parseInstantSafely(msg.get("deletedAt")))
-                        // Kiểm tra xem có field isSystemBan trong JSON không (như bạn đã thêm ở bước trước)
                         .isSystemBan(Boolean.TRUE.equals(msg.get("isSystemBan")))
                         .build())
                 // Sort tin nhắn vi phạm mới nhất lên đầu (hoặc cũ nhất tùy bạn)
