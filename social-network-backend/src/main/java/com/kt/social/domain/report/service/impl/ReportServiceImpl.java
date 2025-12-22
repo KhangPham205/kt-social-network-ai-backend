@@ -233,7 +233,7 @@ public class ReportServiceImpl implements ReportService {
         User currentUser = userService.getCurrentUser();
 
         // 1. Kiểm tra trùng lặp (Một nội dung chỉ được khiếu nại 1 lần đang chờ xử lý)
-        if (complaintRepository.existsByTargetTypeAndTargetId(request.getTargetType(), Long.valueOf(request.getTargetId()))) {
+        if (complaintRepository.existsByTargetTypeAndTargetId(request.getTargetType(), request.getTargetId())) {
             throw new BadRequestException("Nội dung này đang có khiếu nại chờ xử lý hoặc đã được giải quyết.");
         }
 

@@ -17,7 +17,7 @@ import java.util.List;
 @Repository
 public interface ComplaintRepository extends JpaRepository<Complaint, Long>, JpaSpecificationExecutor<Complaint> {
     // Kiểm tra xem đã có khiếu nại nào cho nội dung này chưa (tránh spam)
-    boolean existsByTargetTypeAndTargetId(TargetType targetType, Long targetId);
+    boolean existsByTargetTypeAndTargetId(TargetType targetType, String targetId);
 
     Page<Complaint> findByTargetTypeAndTargetId(TargetType targetType, String targetId, Pageable pageable);
 
