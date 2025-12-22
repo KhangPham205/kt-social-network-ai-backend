@@ -5,6 +5,8 @@ import com.kt.social.common.exception.ResourceNotFoundException;
 import com.kt.social.common.vo.PageVO;
 import com.kt.social.domain.comment.model.Comment;
 import com.kt.social.domain.comment.repository.CommentRepository;
+import com.kt.social.domain.message.model.Conversation;
+import com.kt.social.domain.message.repository.ConversationRepository;
 import com.kt.social.domain.post.model.Post;
 import com.kt.social.domain.post.repository.PostRepository;
 import com.kt.social.domain.react.enums.TargetType;
@@ -30,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +46,7 @@ public class ReportServiceImpl implements ReportService {
     private final CommentRepository commentRepository;
     private final UserService userService;
     private final ReportMapper reportMapper;
+    private final ConversationRepository conversationRepository;
 
     @Override
     @Transactional
@@ -66,6 +70,17 @@ public class ReportServiceImpl implements ReportService {
                     .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
             targetOwnerId = comment.getAuthor().getId();
 
+        } else if (request.getTargetType() == TargetType.MESSAGE) {
+            Optional<Conversation> convo = conversationRepository.findByMessageIdInJson(request.getTargetId());
+            if (convo.isEmpty()) {
+                throw new ResourceNotFoundException("Message not found");
+            }
+            targetOwnerId = convo.get().getMembers().stream()
+                    .filter(m -> !m.getUser().getId().equals(reporterId))
+                    .findFirst()
+                    .orElseThrow(() -> new ResourceNotFoundException("Message owner not found"))
+                    .getUser()
+                    .getId();
         } else if (request.getTargetType() == TargetType.USER) {
             targetOwnerId = Long.valueOf(request.getTargetId());
         }
