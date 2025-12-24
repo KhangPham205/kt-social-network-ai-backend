@@ -5,5 +5,6 @@ public enum TargetType {
     COMMENT,
     MESSAGE,
     USER,
-    MEDIA
+    MEDIA,
+    REPORT
 }

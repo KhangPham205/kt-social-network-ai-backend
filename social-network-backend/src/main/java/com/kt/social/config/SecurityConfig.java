@@ -1,5 +1,6 @@
 package com.kt.social.config;
 
+import com.cloudinary.Api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kt.social.auth.security.JwtAuthenticationFilter;
 import com.kt.social.common.constants.ApiConstants;
@@ -103,6 +104,8 @@ public class SecurityConfig {
                         // 1. Whitelist
                         .requestMatchers(ApiConstants.SWAGGER_WHITELIST).permitAll()
                         .requestMatchers(ApiConstants.PUBLIC_API_WHITELIST).permitAll()
+                        .requestMatchers(HttpMethod.POST, ApiConstants.COMPLAINTS + "/create").permitAll()
+
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/files/**").permitAll()
 

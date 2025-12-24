@@ -36,4 +36,22 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
     long countByStatus(ReportStatus status);
 
     @Query("SELECT r.targetId FROM Report r WHERE r.targetType = :type AND r.targetId IN :ids")
-    Set<String> findReportedTargetIds(@Param("type") TargetType type, @Param("ids") List<String> ids);}
+    Set<String> findReportedTargetIds(@Param("type") TargetType type, @Param("ids") List<String> ids);
+
+    @Query(value = """
+        SELECT CAST(EXTRACT(MONTH FROM created_at) AS INTEGER) as time_unit, COUNT(*) 
+        FROM users 
+        WHERE EXTRACT(YEAR FROM created_at) = :year 
+        GROUP BY time_unit
+    """, nativeQuery = true)
+    List<Object[]> countByYear(@Param("year") int year);
+
+    @Query(value = """
+        SELECT CAST(EXTRACT(DAY FROM created_at) AS INTEGER) as time_unit, COUNT(*) 
+        FROM users 
+        WHERE EXTRACT(MONTH FROM created_at) = :month 
+          AND EXTRACT(YEAR FROM created_at) = :year 
+        GROUP BY time_unit
+    """, nativeQuery = true)
+    List<Object[]> countByMonth(@Param("month") int month, @Param("year") int year);
+}

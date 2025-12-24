@@ -14,6 +14,7 @@ public interface ReportMapper {
     @Mapping(source = "reporter.id", target = "reporterId")
     @Mapping(source = "reporter.displayName", target = "reporterName")
     @Mapping(source = "reporter.avatarUrl", target = "reporterAvatar")
+    @Mapping(source = "status", target = "status")
     ReportResponse toResponse(Report report);
 
     // Map Complaint -> ComplaintResponse

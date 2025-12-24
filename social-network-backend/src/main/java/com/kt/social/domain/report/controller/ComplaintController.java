@@ -42,6 +42,7 @@ public class ComplaintController {
      * Hỗ trợ filter: status, username, reportId...
      * Ví dụ: /api/v1/admin/complaints?filter=status=='PENDING';username=='khang'&page=0&size=10
      */
+    @PreAuthorize("hasAuthority('COMPLAINT:VIEW_ALL')")
     @GetMapping
     public ResponseEntity<PageVO<ComplaintResponse>> getComplaints(
             @RequestParam(required = false) String filter,
@@ -53,6 +54,7 @@ public class ComplaintController {
     /**
      * Lấy chi tiết khiếu nại theo ID
      */
+    @PreAuthorize("hasAuthority('COMPLAINT:VIEW_ALL')")
     @GetMapping("{id}")
     public ResponseEntity<ComplaintResponse> getComplaintById(@PathVariable Long id) {
         return ResponseEntity.ok(reportService.getComplaintById(id));

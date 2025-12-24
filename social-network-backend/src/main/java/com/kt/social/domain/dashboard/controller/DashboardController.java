@@ -7,16 +7,14 @@ import com.kt.social.common.dto.ApiResponse; // Wrapper response của bạn
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping(ApiConstants.API_V1 + "/dashboard")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('ADMIN:READ')") // Chỉ Admin được xem
+@PreAuthorize("hasAuthority('ADMIN:READ')")
 public class DashboardController {
 
     private final DashboardService dashboardService;
@@ -43,5 +41,13 @@ public class DashboardController {
     @GetMapping("/users/trend")
     public ResponseEntity<List<ChartData>> getUserTrend() {
         return ResponseEntity.ok(dashboardService.getNewUserTrend());
+    }
+
+    /* 4. API lấy thống kê chi tiết người dùng
+     * Giúp trả lời: Thống kê chi tiết theo từng loại trong khoảng thời gian cụ thể
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<List<MultiSeriesChartData>> getDetailedStats(@ModelAttribute DashboardStatsRequest request) {
+        return ResponseEntity.ok(dashboardService.getCombinedStats(request));
     }
 }

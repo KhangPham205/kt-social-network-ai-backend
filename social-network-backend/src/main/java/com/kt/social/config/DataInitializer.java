@@ -61,21 +61,25 @@ public class DataInitializer {
         Permission createComplaint = findOrCreatePermission("COMPLAINT", "CREATE", "Create a complaint for banned content");
 
         // --- Moderation Actions (Dành cho Mod/Admin) ---
-        // Xóa nội dung bất kỳ
+
+        // >> Xử lý Post/Comment
         Permission deleteAnyPost = findOrCreatePermission("POST", "DELETE_ANY", "Delete any post (Moderation)");
         Permission deleteAnyComment = findOrCreatePermission("COMMENT", "DELETE_ANY", "Delete any comment (Moderation)");
 
-        // Xử lý Report
+        // >> Xử lý Report
         Permission viewAllReports = findOrCreatePermission("REPORT", "VIEW_ALL", "View all reports");
         Permission processReport = findOrCreatePermission("REPORT", "PROCESS", "Approve or Reject reports");
 
-        // Xử lý Complaint (Khiếu nại)
-        Permission resolveComplaint = findOrCreatePermission("COMPLAINT", "RESOLVE", "Resolve user complaints");
+        // >> Xử lý Complaint (Khiếu nại) - Đã sửa cho khớp Controller
+        Permission viewAllComplaints = findOrCreatePermission("COMPLAINT", "VIEW_ALL", "View all complaints"); // Mới thêm
+        Permission processComplaint = findOrCreatePermission("COMPLAINT", "PROCESS", "Process/Resolve user complaints"); // Đổi tên từ RESOLVE -> PROCESS
 
-        // Quản lý User (Khóa/Mở khóa/Xem tin riêng tư)
+        // >> Quản lý User (Khóa/Mở khóa/Xem tin riêng tư)
         Permission blockUser = findOrCreatePermission("USER", "BLOCK", "Block/Unblock user account");
         Permission readSensitiveUser = findOrCreatePermission("USER", "READ_SENSITIVE", "View sensitive user info (email, violations)");
         Permission readAnyMessage = findOrCreatePermission("MESSAGE", "READ_ANY", "Read any message content for moderation");
+
+        // >> Dashboard
         Permission moderationAccess = findOrCreatePermission("MODERATION", "ACCESS", "Access Moderation Dashboard");
 
         // --- Admin Only ---
@@ -92,16 +96,16 @@ public class DataInitializer {
         assignPermissions(userRole, Set.of(
                 createPost, updatePost, deletePost,
                 createComment, updateComment, deleteComment,
-                createReport, createComplaint // <-- Mới thêm
+                createReport, createComplaint
         ));
 
         // -> MODERATOR: Xóa bài, Xử lý report/khiếu nại, Khóa user, Xem info nhạy cảm
         assignPermissions(moderatorRole, Set.of(
                 deleteAnyPost, deleteAnyComment,
-                viewAllReports, processReport, // <-- Mới thêm
-                resolveComplaint,              // <-- Mới thêm
-                blockUser, readSensitiveUser,  // <-- Mới thêm
-                readAnyMessage, moderationAccess // <-- Mới thêm
+                viewAllReports, processReport,
+                viewAllComplaints, processComplaint, // Đã cập nhật
+                blockUser, readSensitiveUser,
+                readAnyMessage, moderationAccess
         ));
 
         // -> ADMIN: Full quyền Mod + Quản trị hệ thống
@@ -124,7 +128,7 @@ public class DataInitializer {
         System.out.println("✅ Initialization completed successfully.");
     }
 
-    // -------------------- Helper methods --------------------
+    // -------------------- Helper methods (Giữ nguyên) --------------------
 
     private void createDefaultAdmin(Role adminRole) {
         if (!userCredentialRepository.existsByUsername(adminUsername)) {
