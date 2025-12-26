@@ -11,6 +11,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class LoginResponse {
+    private String id;
     private String email;
     private AccountStatus status;
     private List<String> roles;

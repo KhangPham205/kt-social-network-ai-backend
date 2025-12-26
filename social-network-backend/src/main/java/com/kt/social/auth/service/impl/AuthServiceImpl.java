@@ -142,6 +142,7 @@ public class AuthServiceImpl implements AuthService {
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userCredential);
 
         return LoginResponse.builder()
+                .id(user.getId().toString())
                 .email(userCredential.getEmail())
                 .status(userCredential.getStatus())
                 .roles(userCredential.getRoles().stream()
