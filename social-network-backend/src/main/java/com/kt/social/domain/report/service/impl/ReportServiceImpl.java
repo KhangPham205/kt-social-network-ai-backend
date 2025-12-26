@@ -298,6 +298,10 @@ public class ReportServiceImpl implements ReportService {
             if (!comment.getAuthor().getId().equals(userId)) {
                 throw new BadRequestException("Bạn chỉ có thể khiếu nại cho bình luận của chính mình.");
             }
+        } else if (type == TargetType.USER) {
+            if (!targetId.equals(userId)) {
+                throw new BadRequestException("Bạn chỉ có thể khiếu nại cho chính mình.");
+            }
         } else {
             // Handle Message or User types if needed
             throw new BadRequestException("Loại nội dung không hỗ trợ khiếu nại.");
