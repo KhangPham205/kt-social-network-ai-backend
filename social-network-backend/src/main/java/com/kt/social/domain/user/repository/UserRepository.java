@@ -17,8 +17,6 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
     User findByCredential(UserCredential cred);
-    List<User> findByIdIn(List<Long> ids);
-    User findByCredentialUsername(String username);
 
     @Query("SELECT new com.kt.social.domain.moderation.dto.UserModerationResponse(" +
             "u.id, " +
@@ -36,15 +34,12 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             "LOWER(c.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(u.displayName) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
             "GROUP BY u.id, c.username, c.email, u.displayName, u.avatarUrl, c.status " +
-            "HAVING COUNT(r) > 0 " +
-            "ORDER BY COUNT(r) DESC")
+            "HAVING COUNT(r) > 0 OR c.status = com.kt.social.auth.enums.AccountStatus.BLOCKED " +
+            "ORDER BY c.status ASC, COUNT(r) DESC")
     Page<UserModerationResponse> findAllUsersWithReportCount(
             @Param("keyword") String keyword,
             Pageable pageable
     );
-
-    @Query(value = "SELECT COUNT(*) FROM users WHERE is_active = true", nativeQuery = true)
-    long countActiveUsers();
 
     @Query(value = """
     SELECT to_char(created_at, 'YYYY-MM-DD') as date, COUNT(*) 
