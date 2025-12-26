@@ -261,6 +261,7 @@ public class ReportServiceImpl implements ReportService {
                 .targetType(request.getTargetType())
                 .targetId(request.getTargetId())
                 .content(request.getReason())
+                .status(ComplaintStatus.PENDING)
                 .build();
 
         return reportMapper.toResponse(complaintRepository.save(complaint));
