@@ -12,7 +12,7 @@ public class UserModerationResponse {
     private String email;
     private String displayName;
     private String avatar;
-    private boolean isLocked;
+    private AccountStatus status;
     private long violationCount;
 
     // Constructor khớp với thứ tự trong @Query
@@ -28,7 +28,7 @@ public class UserModerationResponse {
         this.email = email;
         this.displayName = displayName;
         this.avatar = avatar;
-        this.isLocked = (status == AccountStatus.BLOCKED);
+        this.status = status;
         this.violationCount = violationCount != null ? violationCount : 0L;
     }
 }
