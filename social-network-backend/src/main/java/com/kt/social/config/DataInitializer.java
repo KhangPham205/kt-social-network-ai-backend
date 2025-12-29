@@ -7,6 +7,8 @@ import com.kt.social.auth.repository.PermissionRepository;
 import com.kt.social.auth.repository.RoleRepository;
 import com.kt.social.auth.repository.UserCredentialRepository;
 import com.kt.social.auth.enums.AccountStatus;
+import com.kt.social.domain.react.model.ReactType;
+import com.kt.social.domain.react.repository.ReactTypeRepository;
 import com.kt.social.domain.user.model.User;
 import com.kt.social.domain.user.model.UserInfo;
 import com.kt.social.domain.user.repository.UserRepository;
@@ -29,6 +31,7 @@ public class DataInitializer {
     private final UserCredentialRepository userCredentialRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
+    private final ReactTypeRepository reactTypeRepository;
 
     @Value("${admin.username}")
     private String adminUsername;
@@ -122,7 +125,10 @@ public class DataInitializer {
 
         assignPermissions(adminRole, adminPermissions);
 
-        // 4. CREATE DEFAULT ADMIN
+        // 4. INIT REACT TYPES (MỚI THÊM)
+        initReactTypes();
+
+        // 5. CREATE DEFAULT ADMIN
         createDefaultAdmin(adminRole);
 
         System.out.println("✅ Initialization completed successfully.");
@@ -203,6 +209,27 @@ public class DataInitializer {
         if (changed) {
             roleRepository.save(role);
             System.out.println("🔄 Updated permissions for role: " + role.getName());
+        }
+    }
+
+    private void initReactTypes() {
+        findOrCreateReactType("LIKE", "👍");
+        findOrCreateReactType("LOVE", "❤️");
+        findOrCreateReactType("HAHA", "😂");
+        findOrCreateReactType("WOW", "😮");
+        findOrCreateReactType("SAD", "😢");
+        findOrCreateReactType("ANGRY", "😡");
+        System.out.println("✅ React types initialized.");
+    }
+
+    private void findOrCreateReactType(String name, String charSymbol) {
+        if (!reactTypeRepository.existsByName(name)) {
+            ReactType type = ReactType.builder()
+                    .name(name)
+                    .charSymbol(charSymbol)
+                    .iconUrl(null)
+                    .build();
+            reactTypeRepository.save(type);
         }
     }
 }
