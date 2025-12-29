@@ -135,8 +135,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, ApiConstants.REPORTS + "/**").hasAuthority("REPORT:CREATE")
 
                         // 8. Moderation API
-                        .requestMatchers(HttpMethod.GET, ApiConstants.MODERATION + "/**").hasAuthority("MODERATION:READ")
-                        .requestMatchers(HttpMethod.PUT, ApiConstants.MODERATION + "/**").hasAuthority("MODERATION:UPDATE")
+                        .requestMatchers(HttpMethod.GET, ApiConstants.MODERATION + "/**").hasAuthority("MODERATION:ACCESS")
+                        .requestMatchers(HttpMethod.PUT, ApiConstants.MODERATION + "/**").hasAuthority("MODERATION:ACCESS")
 
                         // 9. Recommendation API
                         .requestMatchers(ApiConstants.RECOMMENDATIONS + "/**").authenticated()
