@@ -13,7 +13,7 @@ The system is developed for **Project Course – Trường Đại học Công ng
 * **Phạm Tuấn Khang – 23520707** - Backend Developer
 * **Đinh Thanh Tùng – 23521738** - Frontend Developer
 * **Instructor:** ThS. Trần Thị Hồng Yến
-* **Timeline:** 08/09/2024 → 28/12/2024
+* **Timeline:** 08/09/2025 → 28/12/2025
 
 ---
 
