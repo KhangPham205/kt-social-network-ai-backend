@@ -8,7 +8,7 @@
 
 This project aims to build a modern social network website that supports multimedia posting, real-time messaging, friend system, content moderation using AI, and personalized post recommendations.
 
-The system is developed for **Đồ án 1 – Trường Đại học Công nghệ Thông tin (UIT – VNUHCM)** by:
+The system is developed for **Project Course – Trường Đại học Công nghệ Thông tin (UIT – VNUHCM)** by:
 
 * **Phạm Tuấn Khang – 23520707** - Backend Developer
 * **Đinh Thanh Tùng – 23521738** - Frontend Developer
