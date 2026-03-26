@@ -5,6 +5,8 @@ import com.kt.social.domain.moderation.dto.UserModerationResponse;
 import com.kt.social.domain.user.model.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -40,6 +42,9 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             @Param("keyword") String keyword,
             Pageable pageable
     );
+
+  @EntityGraph(attributePaths = {"credential", "userInfo"})
+  Page<User> findAll(Specification<User> spec, Pageable pageable);
 
     @Query(value = """
     SELECT to_char(created_at, 'YYYY-MM-DD') as date, COUNT(*) 

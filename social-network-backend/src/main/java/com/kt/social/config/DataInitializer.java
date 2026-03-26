@@ -14,6 +14,7 @@ import com.kt.social.domain.user.model.UserInfo;
 import com.kt.social.domain.user.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -21,9 +22,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class DataInitializer {
 
     private final RoleRepository roleRepository;
@@ -131,6 +137,9 @@ public class DataInitializer {
         // 5. CREATE DEFAULT ADMIN
         createDefaultAdmin(adminRole);
 
+        // 6. SEED 1000 TEST USERS
+//        createTestUsers(userRole);
+
         System.out.println("✅ Initialization completed successfully.");
     }
 
@@ -231,5 +240,112 @@ public class DataInitializer {
                     .build();
             reactTypeRepository.save(type);
         }
+    }
+
+    /**
+     * Khởi tạo 1000 user test cho việc đo lường hiệu năng
+     * Sử dụng batch processing để tối ưu hiệu năng
+     */
+    @Transactional
+    protected void createTestUsers(Role userRole) {
+        // Kiểm tra nếu đã có user test
+        long existingUserCount = userRepository.count();
+        if (existingUserCount >= 1001) { // Có admin (1) + 1000 test users
+            System.out.println("ℹ️ Test users already exist. Skipping creation.");
+            return;
+        }
+
+        System.out.println("🚀 Starting to create 1000 test users...");
+        long startTime = System.currentTimeMillis();
+
+        int totalUsers = 1000;
+        int batchSize = 50; // Xử lý 50 user mỗi batch để tránh out of memory
+        List<User> userBatch = new ArrayList<>();
+
+        String[] firstNames = {"Phạm", "Nguyễn", "Trần", "Hoàng", "Vũ", "Đặng", "Bùi", "Đinh", "Dương", "Lý"};
+        String[] lastNames = {"Tuấn", "Minh", "Hùng", "Thủy", "Linh", "Khang", "Anh", "Bình", "Công", "Đạt"};
+        String[] bioTemplates = {
+                "I love coding!",
+                "Developer passionate about tech",
+                "Learning Spring Boot",
+                "Java enthusiast",
+                "Building amazing applications",
+                "Coffee and code lover",
+                "Tech enthusiast",
+                "Passionate coder",
+                "Always learning",
+                "Software engineer"
+        };
+        String[] favorites = {"Java, Spring", "React, Node", "Python, Django", "JavaScript", "Kotlin", "Go", "Rust", "C#"};
+
+        Random random = new Random(42); // Fixed seed để có kết quả reproducible
+
+        try {
+            for (int i = 1; i <= totalUsers; i++) {
+                // Tạo UserCredential
+                String username = "testuser" + i;
+                String email = "testuser" + i + "@test.local";
+
+                UserCredential credential = UserCredential.builder()
+                        .username(username)
+                        .email(email)
+                        .password(passwordEncoder.encode("password123")) // Mật khẩu chung cho test
+                        .status(AccountStatus.ACTIVE)
+                        .roles(Set.of(userRole))
+                        .build();
+
+                // Tạo User
+                String firstName = firstNames[random.nextInt(firstNames.length)];
+                String lastName = lastNames[random.nextInt(lastNames.length)];
+                String displayName = firstName + " " + lastName + " " + i;
+
+                User user = User.builder()
+                        .displayName(displayName)
+                        .avatarUrl("https://ui-avatars.com/api/?name=" + displayName.replace(" ", "+") + "&background=random")
+                        .credential(credential)
+                        .build();
+
+                // Tạo UserInfo
+                UserInfo userInfo = UserInfo.builder()
+                        .bio(bioTemplates[random.nextInt(bioTemplates.length)])
+                        .favorites(favorites[random.nextInt(favorites.length)])
+                        .dateOfBirth(generateRandomDate(random))
+                        .user(user)
+                        .build();
+
+                user.setUserInfo(userInfo);
+                credential.setUser(user);
+
+                userBatch.add(user);
+
+                // Xử lý batch
+                if (userBatch.size() == batchSize || i == totalUsers) {
+                    userRepository.saveAll(userBatch);
+                    System.out.println("✅ Created " + i + " / " + totalUsers + " test users");
+                    userBatch.clear();
+                }
+            }
+
+            long endTime = System.currentTimeMillis();
+            long duration = endTime - startTime;
+            System.out.println("✅ Successfully created 1000 test users in " + duration + "ms");
+
+        } catch (Exception e) {
+            System.err.println("❌ Error creating test users: " + e.getMessage());
+            log.error("Error creating test users", e);
+        }
+    }
+
+    /**
+     * Tạo một ngày sinh ngẫu nhiên giữa 18 và 70 tuổi
+     */
+    private Instant generateRandomDate(Random random) {
+        // Sinh nhật giữa 18 và 70 tuổi
+        long currentTime = Instant.now().toEpochMilli();
+        long minAge = 18 * 365L * 24 * 60 * 60 * 1000; // 18 năm trước
+        long maxAge = 70 * 365L * 24 * 60 * 60 * 1000; // 70 năm trước
+
+        long randomTime = currentTime - minAge - random.nextLong() % (maxAge - minAge);
+        return Instant.ofEpochMilli(randomTime);
     }
 }
